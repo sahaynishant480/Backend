@@ -6,11 +6,23 @@ const { errorHandler, notFound } = require('./middleware/errorMiddleware')
 const app = express()
 
 app.use(express.json({ limit: '1mb' }))
-const allowedOrigins = [
+const envOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean)
+
+const allowedOrigins = new Set([
   'https://collab-frontend-five.vercel.app',
   'http://localhost:5173',
-  'http://127.0.0.1:5173'
-]
+  'http://127.0.0.1:5173',
+  ...envOrigins
+])
+
+const isAllowedVercelPreview = (origin) => {
+  if (!origin) return false
+  if (!origin.endsWith('.vercel.app')) return false
+  return origin.includes('collab-frontend')
+}
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -18,7 +30,7 @@ app.use(cors({
       return callback(null, true)
     }
 
-    if (allowedOrigins.includes(origin)) {
+    if (allowedOrigins.has(origin) || isAllowedVercelPreview(origin)) {
       return callback(null, true)
     }
 

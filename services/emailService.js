@@ -1,5 +1,117 @@
 const nodemailer = require('nodemailer')
 
+const getFetch = () => {
+  if (typeof fetch !== 'function') {
+    throw new Error('Fetch API not available. Upgrade Node to v18+ or add a fetch polyfill.')
+  }
+  return fetch
+}
+
+const sendWithTimeout = async (promise, ms, onTimeout) => {
+  let timer
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      if (onTimeout) onTimeout()
+      reject(new Error('Email send timeout'))
+    }, ms)
+  })
+  try {
+    return await Promise.race([promise, timeoutPromise])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+const sendViaResend = async ({ to, subject, text, html }) => {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) {
+    throw new Error('RESEND_API_KEY must be set when EMAIL_PROVIDER=resend')
+  }
+
+  const fromAddress = process.env.EMAIL_FROM || process.env.EMAIL_USER
+  if (!fromAddress) {
+    throw new Error('EMAIL_FROM must be set for Resend')
+  }
+
+  const fetchFn = getFetch()
+  const controller = new AbortController()
+  const timeoutMs = Number(process.env.EMAIL_SEND_TIMEOUT_MS || 12000)
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    const response = await fetchFn('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: fromAddress,
+        to,
+        subject,
+        text,
+        html
+      }),
+      signal: controller.signal
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`Resend error ${response.status}: ${errorText}`)
+    }
+
+    return { success: true, provider: 'resend' }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+const sendViaSendGrid = async ({ to, subject, text, html }) => {
+  const apiKey = process.env.SENDGRID_API_KEY
+  if (!apiKey) {
+    throw new Error('SENDGRID_API_KEY must be set when EMAIL_PROVIDER=sendgrid')
+  }
+
+  const fromAddress = process.env.EMAIL_FROM || process.env.EMAIL_USER
+  if (!fromAddress) {
+    throw new Error('EMAIL_FROM must be set for SendGrid')
+  }
+
+  const fetchFn = getFetch()
+  const controller = new AbortController()
+  const timeoutMs = Number(process.env.EMAIL_SEND_TIMEOUT_MS || 12000)
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    const response = await fetchFn('https://api.sendgrid.com/v3/mail/send', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email: to }] }],
+        from: { email: fromAddress },
+        subject,
+        content: [
+          { type: 'text/plain', value: text || '' },
+          { type: 'text/html', value: html || '' }
+        ]
+      }),
+      signal: controller.signal
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`SendGrid error ${response.status}: ${errorText}`)
+    }
+
+    return { success: true, provider: 'sendgrid' }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 const getTransporter = async () => {
   const {
     EMAIL_SERVICE,
@@ -47,9 +159,16 @@ const getTransporter = async () => {
 
 exports.sendEmail = async ({ to, subject, text, html }) => {
   try {
+    const provider = (process.env.EMAIL_PROVIDER || '').toLowerCase().trim()
+    if (provider === 'resend') {
+      return await sendViaResend({ to, subject, text, html })
+    }
+    if (provider === 'sendgrid') {
+      return await sendViaSendGrid({ to, subject, text, html })
+    }
+
     const transporter = await getTransporter()
     const fromAddress = process.env.EMAIL_FROM || process.env.EMAIL_USER
-    const sendTimeoutMs = Number(process.env.EMAIL_SEND_TIMEOUT_MS || 12000)
 
     const sendPromise = transporter.sendMail({
       from: `Collab <${fromAddress}>`,
@@ -59,19 +178,20 @@ exports.sendEmail = async ({ to, subject, text, html }) => {
       html
     })
 
-    const timeoutPromise = new Promise((_, reject) => {
-      const timer = setTimeout(() => {
+    // Prevent unhandled rejections if the send times out.
+    sendPromise.catch(() => {})
+
+    const info = await sendWithTimeout(
+      sendPromise,
+      Number(process.env.EMAIL_SEND_TIMEOUT_MS || 12000),
+      () => {
         try {
           transporter.close()
         } catch (closeError) {
           // ignore close errors
         }
-        reject(new Error('Email send timeout'))
-      }, sendTimeoutMs)
-      sendPromise.finally(() => clearTimeout(timer))
-    })
-
-    const info = await Promise.race([sendPromise, timeoutPromise])
+      }
+    )
 
     return { success: true, messageId: info.messageId }
   } catch (error) {
