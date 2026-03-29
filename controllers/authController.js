@@ -62,7 +62,8 @@ exports.register = async (req, res) => {
       course, 
       yearOfStudy, 
       skills, 
-      primaryCategory 
+      primaryCategory,
+      phone
     } = req.body
 
     if (!name || !email || !password) {
@@ -140,6 +141,7 @@ exports.register = async (req, res) => {
       yearOfStudy: yearOfStudy || '',
       skills: normalizedSkills,
       primaryCategory: primaryCategory || '',
+      phone: phone ? phone.toString().trim() : '',
       emailVerified: false,
       emailVerificationOTP: otp,
       emailVerificationExpires: expires

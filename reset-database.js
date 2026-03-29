@@ -1,4 +1,4 @@
-require('dotenv').config()
+require('./config/loadEnv')
 const mongoose = require('mongoose')
 const connectDB = require('./config/db')
 

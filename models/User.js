@@ -16,6 +16,7 @@ const UserSchema = new mongoose.Schema({
   yearOfStudy: { type: String, required: false },
   skills: [{ type: String, required: false }],
   primaryCategory: { type: String, required: false },
+  phone: { type: String, required: false, trim: true },
   points: { type: Number, default: 0 },
   badges: [{ type: String, required: false }],
   projectsCreated: { type: Number, default: 0 },

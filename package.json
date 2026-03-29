@@ -1,10 +1,11 @@
 {
-  "name": "student-startup-server",
+  "name": "collab-backend",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "nodemon server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "reset:db": "NODE_ENV=development node reset-database.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

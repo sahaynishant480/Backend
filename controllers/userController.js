@@ -23,6 +23,7 @@ exports.getProfile = async (req, res) => {
       yearOfStudy: user.yearOfStudy,
       skills: user.skills,
       primaryCategory: user.primaryCategory,
+      phone: user.phone || '',
       points: user.points,
       badges: user.badges,
       projectsCreated: user.projectsCreated,
@@ -42,7 +43,7 @@ exports.getProfile = async (req, res) => {
 exports.updateProfile = async (req, res) => {
   try {
     const userId = req.user.userId
-    const { name, course, yearOfStudy, skills, primaryCategory, showContactToTeam } = req.body
+    const { name, course, yearOfStudy, skills, primaryCategory, showContactToTeam, phone } = req.body
 
     const user = await User.findById(userId)
     if (!user) {
@@ -55,6 +56,7 @@ exports.updateProfile = async (req, res) => {
     if (skills) user.skills = Array.isArray(skills) ? skills : [skills]
     if (primaryCategory) user.primaryCategory = primaryCategory
     if (showContactToTeam !== undefined) user.showContactToTeam = showContactToTeam
+    if (phone !== undefined) user.phone = phone ? phone.toString().trim() : ''
 
     await user.save()
 

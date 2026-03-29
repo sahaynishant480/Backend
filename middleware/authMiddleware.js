@@ -14,6 +14,12 @@ exports.protect = async (req, res, next) => {
       return res.status(401).json({ message: 'User not found' })
     }
 
+    const lastActive = user.lastActive ? new Date(user.lastActive).getTime() : 0
+    if (!lastActive || Date.now() - lastActive > 2 * 60 * 1000) {
+      user.lastActive = new Date()
+      await user.save()
+    }
+
     req.user = { userId: user._id, email: user.email, role: user.role }
     next()
   } catch (error) {

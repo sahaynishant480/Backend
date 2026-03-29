@@ -240,9 +240,9 @@ exports.getProjectById = async (req, res) => {
     const viewerId = req.user?.userId ? req.user.userId.toString() : ''
 
     const project = await Project.findById(id)
-      .populate('owner', 'name email')
-      .populate('teamMembers', 'name email')
-      .populate('interestedUsers', 'name email')
+      .populate('owner', 'name email phone lastActive')
+      .populate('teamMembers', 'name email phone lastActive')
+      .populate('interestedUsers', 'name email phone lastActive')
       .populate('messages.sender', 'name email')
       .populate('files.uploadedBy', 'name email')
       .populate('validation.sharedFiles.uploadedBy', 'name email')
