@@ -1,0 +1,470 @@
+================================================================================
+                    USER MANAGEMENT & DATABASE OPERATIONS GUIDE
+================================================================================
+
+This guide provides detailed instructions for managing users, login status, and
+database operations in the Collab.
+
+================================================================================
+                            TABLE OF CONTENTS
+================================================================================
+
+1. DATABASE CONNECTION & SETUP
+2. USER MODEL STRUCTURE
+3. MANAGING USER LOGIN STATUS
+4. ADDING NEW USERS
+5. REMOVING USERS
+6. MONITORING USER ACTIVITY
+7. DATABASE QUERY EXAMPLES
+8. SECURITY CONSIDERATIONS
+9. AUTOMATION SCRIPTS
+10. TROUBLESHOOTING
+
+================================================================================
+1. DATABASE CONNECTION & SETUP
+================================================================================
+
+Database Connection Details:
+- Type: MongoDB
+- Connection URI: Set in .env file as MONGO_URI
+- Local Default: mongodb://127.0.0.1:27017/student-startup-db
+
+To connect to database:
+1. Open terminal and navigate to server folder
+2. Run: mongosh (MongoDB Shell)
+3. Connect: use student-startup-db
+
+Environment Variables (.env file):
+MONGO_URI=mongodb://127.0.0.1:27017/student-startup-db
+PORT=5000
+JWT_SECRET=your_jwt_secret_here
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USER=your_email@gmail.com
+EMAIL_PASS=your_app_password
+
+================================================================================
+2. USER MODEL STRUCTURE
+================================================================================
+
+User Schema Fields:
+{
+  _id: ObjectId (auto-generated),
+  name: String (required) - User's full name,
+  email: String (required, unique) - User's email address,
+  password: String (required, hashed) - Encrypted password,
+  role: String (default: 'user') - User role (user/admin),
+  emailVerified: Boolean (default: false) - Email verification status,
+  emailVerificationOTP: String - OTP for email verification,
+  emailVerificationExpires: Date - OTP expiration time,
+  resetPasswordOTP: String - OTP for password reset,
+  resetPasswordExpires: Date - Password reset OTP expiration,
+  createdAt: Date (auto) - Account creation timestamp,
+  updatedAt: Date (auto) - Last update timestamp
+}
+
+Related Collections:
+- Projects: Owned by users (owner field)
+- JoinRequests: Sent by/to users
+- Feedback: Created by users
+- Tasks: Assigned to users
+
+================================================================================
+3. MANAGING USER LOGIN STATUS
+================================================================================
+
+Login Status Indicators:
+1. Email Verification (emailVerified field)
+2. Last Activity (can be tracked via updatedAt)
+3. Active Sessions (JWT tokens - stored client-side)
+4. Password Reset Status (resetPasswordOTP field)
+
+Methods to Track Login Status:
+
+A) VIA MONGODB SHELL:
+---------------------
+# Check all users with their verification status
+db.users.find({}, {name: 1, email: 1, emailVerified: 1, createdAt: 1, updatedAt: 1})
+
+# Find recently active users (last 7 days)
+var weekAgo = new Date()
+weekAgo.setDate(weekAgo.getDate() - 7)
+db.users.find({updatedAt: {$gte: weekAgo}})
+
+# Find unverified users
+db.users.find({emailVerified: false})
+
+# Find users with password reset requests
+db.users.find({resetPasswordOTP: {$exists: true, $ne: null}})
+
+B) VIA NODE.JS SCRIPT:
+----------------------
+Create script: check-user-status.js
+```
+const mongoose = require('mongoose')
+const User = require('./models/User')
+
+async function checkUserStatus() {
+  await mongoose.connect(process.env.MONGO_URI)
+  
+  const users = await User.find({})
+    .select('name email emailVerified createdAt updatedAt')
+    .sort({updatedAt: -1})
+  
+  console.log('User Status Report:')
+  console.log('==================')
+  users.forEach(user => {
+    const status = user.emailVerified ? '✓ Verified' : '✗ Unverified'
+    const lastActive = user.updatedAt.toISOString().split('T')[0]
+    console.log(`${user.name} (${user.email}) - ${status} - Last active: ${lastActive}`)
+  })
+  
+  await mongoose.disconnect()
+}
+checkUserStatus()
+```
+
+================================================================================
+4. ADDING NEW USERS
+================================================================================
+
+Method 1: Through Website Registration
+--------------------------------------
+1. Navigate to http://localhost:5173/register
+2. Fill registration form
+3. Verify email (if email verification is enabled)
+4. User is automatically added to database
+
+Method 2: Direct Database Insertion
+----------------------------------
+Via MongoDB Shell:
+```
+db.users.insertOne({
+  name: "John Doe",
+  email: "john@example.com",
+  password: "$2a$10$...", // Hashed password
+  role: "user",
+  emailVerified: true,
+  createdAt: new Date(),
+  updatedAt: new Date()
+})
+```
+
+Via Node.js Script:
+```
+const bcrypt = require('bcryptjs')
+const User = require('./models/User')
+
+async function createUser(name, email, password, role = 'user') {
+  const hashedPassword = await bcrypt.hash(password, 10)
+  
+  const user = new User({
+    name,
+    email,
+    password: hashedPassword,
+    role,
+    emailVerified: true
+  })
+  
+  return await user.save()
+}
+```
+
+Method 3: Admin Panel
+---------------------
+1. Log in as admin user
+2. Navigate to /admin
+3. Use admin interface to create users
+
+================================================================================
+5. REMOVING USERS
+================================================================================
+
+IMPORTANT: Always backup database before removing users!
+
+Method 1: Via MongoDB Shell
+---------------------------
+# Remove specific user by email
+db.users.deleteOne({email: "user@example.com"})
+
+# Remove user by ID
+db.users.deleteOne({_id: ObjectId("...")})
+
+# Remove multiple users (CAUTION!)
+db.users.deleteMany({role: "user"}) // Removes all regular users
+
+Method 2: Via Node.js Script
+---------------------------
+Create script: remove-user.js
+```
+const mongoose = require('mongoose')
+const User = require('./models/User')
+const Project = require('./models/Project')
+
+async function removeUser(email) {
+  await mongoose.connect(process.env.MONGO_URI)
+  
+  // Find user first
+  const user = await User.findOne({email})
+  if (!user) {
+    console.log('User not found')
+    return
+  }
+  
+  // Handle user's projects (transfer or delete)
+  await Project.deleteMany({owner: user._id})
+  
+  // Remove from team memberships
+  await Project.updateMany(
+    {teamMembers: user._id},
+    {$pull: {teamMembers: user._id}}
+  )
+  
+  // Remove from interested users
+  await Project.updateMany(
+    {interestedUsers: user._id},
+    {$pull: {interestedUsers: user._id}}
+  )
+  
+  // Delete the user
+  await User.deleteOne({_id: user._id})
+  
+  console.log(`User ${email} and all associated data removed`)
+  await mongoose.disconnect()
+}
+
+removeUser('user@example.com')
+```
+
+================================================================================
+6. MONITORING USER ACTIVITY
+================================================================================
+
+Real-time Monitoring Scripts:
+
+A) User Activity Dashboard:
+--------------------------
+```
+const mongoose = require('mongoose')
+const User = require('./models/User')
+const Project = require('./models/Project')
+
+async function getActivityReport() {
+  await mongoose.connect(process.env.MONGO_URI)
+  
+  const totalUsers = await User.countDocuments()
+  const verifiedUsers = await User.countDocuments({emailVerified: true})
+  const activeUsers = await User.countDocuments({
+    updatedAt: {$gte: new Date(Date.now() - 7*24*60*60*1000)}
+  })
+  const totalProjects = await Project.countDocuments()
+  
+  console.log('Activity Report')
+  console.log('================')
+  console.log(`Total Users: ${totalUsers}`)
+  console.log(`Verified Users: ${verifiedUsers}`)
+  console.log(`Active Users (7 days): ${activeUsers}`)
+  console.log(`Total Projects: ${totalProjects}`)
+  
+  await mongoose.disconnect()
+}
+```
+
+B) Login Tracking:
+-----------------
+Add to User model:
+```
+lastLogin: Date,
+loginCount: {type: Number, default: 0}
+```
+
+Update login controller to track:
+```
+await User.findByIdAndUpdate(userId, {
+  $set: {lastLogin: new Date()},
+  $inc: {loginCount: 1}
+})
+```
+
+================================================================================
+7. DATABASE QUERY EXAMPLES
+================================================================================
+
+Common User Management Queries:
+
+# Find all users (basic info)
+db.users.find({}, {name: 1, email: 1, role: 1, emailVerified: 1})
+
+# Find users by role
+db.users.find({role: "admin"})
+
+# Find users created in last 30 days
+var thirtyDaysAgo = new Date()
+thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+db.users.find({createdAt: {$gte: thirtyDaysAgo}})
+
+# Find users with specific email domain
+db.users.find({email: /@gmail\.com$/})
+
+# Count users by verification status
+db.users.aggregate([
+  {$group: {_id: "$emailVerified", count: {$sum: 1}}}
+])
+
+# Find inactive users (no login for 30 days)
+var thirtyDaysAgo = new Date()
+thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+db.users.find({updatedAt: {$lt: thirtyDaysAgo}})
+
+# Search users by name (case-insensitive)
+db.users.find({name: {$regex: "john", $options: "i"}})
+
+================================================================================
+8. SECURITY CONSIDERATIONS
+================================================================================
+
+Password Security:
+- All passwords are hashed using bcryptjs
+- Minimum password length should be 8 characters
+- Never store plain text passwords
+
+Email Verification:
+- Use OTP codes with expiration (typically 15-30 minutes)
+- Implement rate limiting for OTP requests
+- Store OTP hashes, not plain text
+
+Session Management:
+- JWT tokens expire automatically (set reasonable expiration)
+- Implement token refresh mechanism
+- Store tokens securely (httpOnly cookies recommended)
+
+Data Privacy:
+- Never expose user passwords in API responses
+- Implement proper data sanitization
+- Use HTTPS in production
+
+================================================================================
+9. AUTOMATION SCRIPTS
+================================================================================
+
+A) Daily User Report (cron job):
+-------------------------------
+```
+const mongoose = require('mongoose')
+const User = require('./models/User')
+const fs = require('fs')
+
+async function generateDailyReport() {
+  await mongoose.connect(process.env.MONGO_URI)
+  
+  const today = new Date().toISOString().split('T')[0]
+  const newUsers = await User.countDocuments({
+    createdAt: {$gte: new Date(today)}
+  })
+  
+  const report = `Daily Report - ${today}\nNew Users: ${newUsers}\n`
+  
+  fs.appendFileSync('reports/user-activity.log', report)
+  await mongoose.disconnect()
+}
+```
+
+B) Cleanup Script (remove expired OTPs):
+---------------------------------------
+```
+async function cleanupExpiredOTPs() {
+  await mongoose.connect(process.env.MONGO_URI)
+  
+  await User.updateMany(
+    {emailVerificationExpires: {$lt: new Date()}},
+    {$unset: {emailVerificationOTP: 1, emailVerificationExpires: 1}}
+  )
+  
+  await User.updateMany(
+    {resetPasswordExpires: {$lt: new Date()}},
+    {$unset: {resetPasswordOTP: 1, resetPasswordExpires: 1}}
+  )
+  
+  console.log('Expired OTPs cleaned up')
+  await mongoose.disconnect()
+}
+```
+
+================================================================================
+10. TROUBLESHOOTING
+================================================================================
+
+Common Issues & Solutions:
+
+1) User Cannot Login:
+   - Check if email is verified
+   - Verify password hash matches
+   - Check JWT token configuration
+
+2) Database Connection Issues:
+   - Verify MongoDB is running
+   - Check connection URI in .env
+   - Ensure network accessibility
+
+3) Duplicate Email Error:
+   - Check if user already exists
+   - Verify email case sensitivity
+   - Check for soft-deleted users
+
+4) Performance Issues:
+   - Add database indexes on email field
+   - Implement pagination for user lists
+   - Use lean() queries for read-only operations
+
+Emergency Commands:
+# Reset all user passwords (emergency only)
+db.users.updateMany({}, {$set: {password: "$2a$10$..."}})
+
+# Force verify all emails
+db.users.updateMany({}, {$set: {emailVerified: true}})
+
+# Remove all unverified users older than 30 days
+var thirtyDaysAgo = new Date()
+thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+db.users.deleteMany({emailVerified: false, createdAt: {$lt: thirtyDaysAgo}})
+
+================================================================================
+                            QUICK REFERENCE
+================================================================================
+
+ESSENTIAL COMMANDS:
+------------------
+# Connect to database
+mongosh
+
+# Use database
+use student-startup-db
+
+# View all users
+db.users.find().pretty()
+
+# Count users
+db.users.countDocuments()
+
+# Create admin user
+(node admin-user-creator.js)
+
+# Reset database
+(node reset-database.js)
+
+# Check user status
+(node check-user-status.js)
+
+# Remove user
+(node remove-user.js email@example.com)
+
+================================================================================
+                        END OF DOCUMENT
+================================================================================
+
+For additional support or questions, refer to the API documentation or
+contact the development team.
+
+Last Updated: $(date)
+Version: 1.0
+Platform: Collab
