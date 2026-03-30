@@ -6,6 +6,24 @@ const { submitValidation } = require('./validationController')
 
 const toId = (value) => (value ? value.toString() : '')
 
+const normalizeLabel = (value) => {
+  if (typeof value !== 'string') return ''
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  return trimmed
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ')
+}
+
+const normalizeLabelList = (items) => {
+  const list = Array.isArray(items) ? items : items ? [items] : []
+  const normalized = list
+    .map((item) => normalizeLabel(typeof item === 'string' ? item : ''))
+    .filter(Boolean)
+  return [...new Set(normalized)]
+}
+
 const isViewerTeamMember = (project, viewerId) => {
   if (!viewerId) return false
   return (project.teamMembers || []).some((member) => toId(member._id || member) === viewerId)
@@ -107,13 +125,8 @@ exports.createProject = async (req, res) => {
 
     const owner = await User.findById(userId).select('college college_id')
 
-    const normalizedSkills = (Array.isArray(skillsRequired) ? skillsRequired : skillsRequired ? [skillsRequired] : [])
-      .map((skill) => (typeof skill === 'string' ? skill.trim() : ''))
-      .filter(Boolean)
-
-    const normalizedRoles = (Array.isArray(rolesNeeded) ? rolesNeeded : rolesNeeded ? [rolesNeeded] : [])
-      .map((role) => (typeof role === 'string' ? role.trim() : ''))
-      .filter(Boolean)
+    const normalizedSkills = normalizeLabelList(skillsRequired)
+    const normalizedRoles = normalizeLabelList(rolesNeeded)
 
     const project = new Project({
       title: normalizedTitle,
@@ -123,7 +136,7 @@ exports.createProject = async (req, res) => {
       tags: (Array.isArray(tags) ? tags : tags ? [tags] : []).filter(Boolean),
       rolesNeeded: normalizedRoles,
       skillsRequired: normalizedSkills,
-      numberOfTeammates: parseInt(numberOfTeammates) || 1,
+      numberOfTeammates: Math.min(10, Math.max(1, parseInt(numberOfTeammates, 10) || 1)),
       visibility: visibility || 'college',
       college: owner?.college || owner?.college_id || undefined,
       executionPlan: normalizedExecutionPlan,
@@ -196,7 +209,7 @@ exports.getProjects = async (req, res) => {
         ? skills
         : skills.split(',').map((skill) => skill.trim()).filter(Boolean)
       if (skillsArray.length > 0) {
-        filter.skillsRequired = { $in: skillsArray }
+        filter.skillsRequired = { $in: normalizeLabelList(skillsArray) }
       }
     }
 
@@ -205,7 +218,7 @@ exports.getProjects = async (req, res) => {
         ? roles
         : roles.split(',').map((role) => role.trim()).filter(Boolean)
       if (rolesArray.length > 0) {
-        filter.rolesNeeded = { $in: rolesArray }
+        filter.rolesNeeded = { $in: normalizeLabelList(rolesArray) }
       }
     }
 
@@ -231,6 +244,23 @@ exports.getValidationProjects = async (req, res) => {
   } catch (error) {
     console.error('Get validation projects error:', error)
     res.status(500).json({ message: 'Failed to fetch validation projects' })
+  }
+}
+
+exports.getProjectOptions = async (req, res) => {
+  try {
+    const [roles, skills] = await Promise.all([
+      Project.distinct('rolesNeeded'),
+      Project.distinct('skillsRequired')
+    ])
+
+    const normalizedRoles = normalizeLabelList(roles)
+    const normalizedSkills = normalizeLabelList(skills)
+
+    res.json({ roles: normalizedRoles, skills: normalizedSkills })
+  } catch (error) {
+    console.error('Get project options error:', error)
+    res.status(500).json({ message: 'Failed to fetch project options' })
   }
 }
 
@@ -287,7 +317,7 @@ exports.joinProject = async (req, res) => {
       return res.status(404).json({ message: 'Project not found' })
     }
 
-    const maxTeamMembers = (project.numberOfTeammates || 0) + 1
+    const maxTeamMembers = project.numberOfTeammates || 0
     const teamCount = (project.teamMembers || []).length
 
     if (teamCount >= maxTeamMembers) {
@@ -414,7 +444,7 @@ exports.addTeamMember = async (req, res) => {
       return res.status(404).json({ message: 'Project not found' })
     }
 
-    const maxTeamMembers = (project.numberOfTeammates || 0) + 1
+    const maxTeamMembers = project.numberOfTeammates || 0
     const currentTeamCount = (project.teamMembers || []).length
 
     if (currentTeamCount >= maxTeamMembers) {
@@ -499,6 +529,65 @@ exports.addTeamMember = async (req, res) => {
   } catch (error) {
     console.error('Error adding team member:', error)
     res.status(500).json({ message: 'Failed to add team member' })
+  }
+}
+
+exports.updateProjectRequirements = async (req, res) => {
+  try {
+    const { id } = req.params
+    const requesterId = req.user?.userId
+    const { rolesNeeded, skillsRequired, numberOfTeammates, visibility } = req.body
+
+    if (!requesterId) {
+      return res.status(401).json({ message: 'Unauthorized' })
+    }
+
+    const project = await Project.findById(id)
+    if (!project) {
+      return res.status(404).json({ message: 'Project not found' })
+    }
+
+    if (project.owner.toString() !== requesterId.toString()) {
+      return res.status(403).json({ message: 'Only the project owner can update requirements' })
+    }
+
+    const nextTeamSize = Number.isFinite(Number(numberOfTeammates))
+      ? parseInt(numberOfTeammates, 10)
+      : project.numberOfTeammates
+
+    const currentTeamCount = (project.teamMembers || []).length
+    if (nextTeamSize < 1 || nextTeamSize > 10) {
+      return res.status(400).json({ message: 'Team size must be between 1 and 10' })
+    }
+
+    if (nextTeamSize < currentTeamCount) {
+      return res.status(400).json({ message: 'Team size cannot be less than current members' })
+    }
+
+    if (typeof numberOfTeammates !== 'undefined') {
+      project.numberOfTeammates = nextTeamSize
+    }
+    if (typeof visibility === 'string' && ['college', 'global'].includes(visibility)) {
+      project.visibility = visibility
+    }
+    if (typeof rolesNeeded !== 'undefined') {
+      project.rolesNeeded = normalizeLabelList(rolesNeeded)
+    }
+    if (typeof skillsRequired !== 'undefined') {
+      project.skillsRequired = normalizeLabelList(skillsRequired)
+    }
+
+    await project.save()
+
+    const populated = await Project.findById(project._id)
+      .populate('owner', 'name email')
+      .populate('teamMembers', 'name email')
+      .populate('interestedUsers', 'name email')
+
+    res.json({ message: 'Project requirements updated', project: populated })
+  } catch (error) {
+    console.error('Update project requirements error:', error)
+    res.status(500).json({ message: 'Failed to update project requirements' })
   }
 }
 
@@ -828,7 +917,7 @@ exports.startValidation = async (req, res) => {
       return res.status(403).json({ message: 'Only the project owner can validate' })
     }
 
-    const maxTeamMembers = (project.numberOfTeammates || 0) + 1
+    const maxTeamMembers = project.numberOfTeammates || 0
     const teamCount = (project.teamMembers || []).length
     if (teamCount < maxTeamMembers) {
       return res.status(400).json({ message: 'Team is not full yet' })

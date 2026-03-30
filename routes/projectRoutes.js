@@ -19,7 +19,9 @@ const {
   updateActivity,
   submitReview,
   markReviewHelpful,
-  getValidationProjects
+  getValidationProjects,
+  getProjectOptions,
+  updateProjectRequirements
 } = require('../controllers/projectController')
 
 const uploadsDir = path.join(__dirname, '..', 'uploads')
@@ -37,9 +39,11 @@ const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024 } })
 // Basic CRUD
 router.post('/', createProject)
 router.get('/', getProjects)
+router.get('/options', getProjectOptions)
 router.get('/validation', getValidationProjects)
 router.get('/:id', getProjectById)
 router.delete('/:id', deleteProject)
+router.put('/:id/requirements', updateProjectRequirements)
 router.post('/:id/validate', startValidation)
 router.post('/:id/start-build', startBuildPhase)
 router.post('/:id/complete', completeProject)
