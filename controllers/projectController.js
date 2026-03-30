@@ -1042,6 +1042,50 @@ exports.startValidation = async (req, res) => {
   }
 }
 
+exports.removeFromValidation = async (req, res) => {
+  try {
+    const { id } = req.params
+    const requesterId = req.user?.userId
+
+    const project = await Project.findById(id)
+    if (!project) {
+      return res.status(404).json({ message: 'Project not found' })
+    }
+
+    if (!requesterId || project.owner.toString() !== requesterId.toString()) {
+      return res.status(403).json({ message: 'Only the project owner can update validation status' })
+    }
+
+    if (project.status !== 'validation') {
+      return res.status(400).json({ message: 'Project is not in validation' })
+    }
+
+    project.status = 'completed'
+    project.buildPhase.isActive = false
+    if (!project.validation) {
+      project.validation = {}
+    }
+    project.validation.currentReviews = 0
+    project.validation.averageRating = 0
+    project.validation.reviews = []
+    project.validation.validationStatus = 'pending'
+    project.validation.validatedAt = undefined
+    project.validation.featuredAt = undefined
+
+    await project.save()
+
+    const populated = await Project.findById(project._id)
+      .populate('owner', 'name email')
+      .populate('teamMembers', 'name email')
+      .populate('interestedUsers', 'name email')
+
+    res.json({ message: 'Project removed from validation', project: populated })
+  } catch (error) {
+    console.error('Remove validation error:', error)
+    res.status(500).json({ message: 'Failed to remove project from validation' })
+  }
+}
+
 exports.submitReview = async (req, res) => {
   req.body.projectId = req.params.id
   return submitValidation(req, res)

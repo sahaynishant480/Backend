@@ -23,7 +23,8 @@ const {
   getValidationProjects,
   getProjectOptions,
   updateProjectRequirements,
-  updateProjectDetails
+  updateProjectDetails,
+  removeFromValidation
 } = require('../controllers/projectController')
 
 const uploadsDir = path.join(__dirname, '..', 'uploads')
@@ -51,6 +52,7 @@ router.delete('/:id', deleteProject)
 router.put('/:id/details', updateProjectDetails)
 router.put('/:id/requirements', updateProjectRequirements)
 router.post('/:id/validate', startValidation)
+router.post('/:id/validation/remove', removeFromValidation)
 router.post('/:id/start-build', startBuildPhase)
 router.post('/:id/complete', completeProject)
 router.post('/:id/update-activity', updateActivity)
