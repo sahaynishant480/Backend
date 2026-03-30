@@ -22,7 +22,8 @@ const {
   markReviewHelpful,
   getValidationProjects,
   getProjectOptions,
-  updateProjectRequirements
+  updateProjectRequirements,
+  updateProjectDetails
 } = require('../controllers/projectController')
 
 const uploadsDir = path.join(__dirname, '..', 'uploads')
@@ -47,6 +48,7 @@ router.get('/options', getProjectOptions)
 router.get('/validation', getValidationProjects)
 router.get('/:id', getProjectById)
 router.delete('/:id', deleteProject)
+router.put('/:id/details', updateProjectDetails)
 router.put('/:id/requirements', updateProjectRequirements)
 router.post('/:id/validate', startValidation)
 router.post('/:id/start-build', startBuildPhase)

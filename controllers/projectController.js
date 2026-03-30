@@ -591,6 +591,75 @@ exports.updateProjectRequirements = async (req, res) => {
   }
 }
 
+exports.updateProjectDetails = async (req, res) => {
+  try {
+    const { id } = req.params
+    const requesterId = req.user?.userId
+    const { title, shortPitch, description, tags, executionPlan } = req.body
+
+    if (!requesterId) {
+      return res.status(401).json({ message: 'Unauthorized' })
+    }
+
+    const project = await Project.findById(id)
+    if (!project) {
+      return res.status(404).json({ message: 'Project not found' })
+    }
+
+    if (project.owner.toString() !== requesterId.toString()) {
+      return res.status(403).json({ message: 'Only the project owner can update details' })
+    }
+
+    if (typeof title === 'string') {
+      const normalized = title.trim()
+      if (!normalized) {
+        return res.status(400).json({ message: 'Title cannot be empty' })
+      }
+      project.title = normalized
+    }
+
+    if (typeof shortPitch === 'string') {
+      const normalized = shortPitch.trim()
+      if (!normalized) {
+        return res.status(400).json({ message: 'Short pitch cannot be empty' })
+      }
+      project.shortPitch = normalized
+    }
+
+    if (typeof description === 'string') {
+      const normalized = description.trim()
+      project.description = normalized || project.shortPitch || project.title
+    }
+
+    if (typeof executionPlan === 'string') {
+      const normalized = executionPlan.trim()
+      if (!normalized) {
+        return res.status(400).json({ message: 'Execution plan cannot be empty' })
+      }
+      project.executionPlan = normalized
+    }
+
+    if (typeof tags !== 'undefined') {
+      const normalizedTags = (Array.isArray(tags) ? tags : tags ? [tags] : [])
+        .map((tag) => (typeof tag === 'string' ? tag.trim() : ''))
+        .filter(Boolean)
+      project.tags = normalizedTags
+    }
+
+    await project.save()
+
+    const populated = await Project.findById(project._id)
+      .populate('owner', 'name email')
+      .populate('teamMembers', 'name email')
+      .populate('interestedUsers', 'name email')
+
+    res.json({ message: 'Project details updated', project: populated })
+  } catch (error) {
+    console.error('Update project details error:', error)
+    res.status(500).json({ message: 'Failed to update project details' })
+  }
+}
+
 exports.removeTeamMember = async (req, res) => {
   try {
     const { id } = req.params
