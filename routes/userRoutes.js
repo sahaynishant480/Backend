@@ -8,7 +8,8 @@ const {
   getRank,
   getUserProjects,
   getAllUsers,
-  getUserActivity
+  getUserActivity,
+  getAdminStats
 } = require('../controllers/userController')
 
 router.get('/me', getProfile)
@@ -19,5 +20,6 @@ router.get('/rank', getRank)
 router.get('/projects', getUserProjects)
 router.get('/all', getAllUsers)
 router.get('/activity', getUserActivity)
+router.get('/admin-stats', getAdminStats)
 
 module.exports = router

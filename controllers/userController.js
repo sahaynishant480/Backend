@@ -306,3 +306,45 @@ exports.getUserActivity = async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch user activity' })
   }
 }
+
+exports.getAdminStats = async (req, res) => {
+  try {
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ message: 'Admin access required' })
+    }
+
+    const Project = require('../models/Project')
+    const now = Date.now()
+    const signupWindowDays = 7
+    const signupSince = new Date(now - signupWindowDays * 24 * 60 * 60 * 1000)
+
+    const [totalUsers, activeProjects, newSignups, validationAgg] = await Promise.all([
+      User.countDocuments({}),
+      Project.countDocuments({ status: { $ne: 'archived' } }),
+      User.countDocuments({ createdAt: { $gte: signupSince } }),
+      Project.aggregate([
+        {
+          $group: {
+            _id: null,
+            totalReviews: { $sum: { $ifNull: ['$validation.currentReviews', 0] } }
+          }
+        }
+      ])
+    ])
+
+    const validationsRun = validationAgg?.[0]?.totalReviews || 0
+
+    res.json({
+      stats: {
+        totalUsers,
+        activeProjects,
+        validationsRun,
+        newSignups,
+        signupWindowDays
+      }
+    })
+  } catch (error) {
+    console.error('Get admin stats error:', error)
+    res.status(500).json({ message: 'Failed to fetch admin stats' })
+  }
+}
