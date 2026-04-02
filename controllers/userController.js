@@ -2,6 +2,20 @@ const User = require('../models/User')
 const College = require('../models/College')
 const bcrypt = require('bcryptjs')
 
+const emailIsValid = (email) => {
+  const re = /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/
+  return re.test(String(email).toLowerCase())
+}
+
+const passwordIsStrong = (password) => {
+  return typeof password === 'string'
+    && password.length >= 8
+    && /[A-Z]/.test(password)
+    && /[a-z]/.test(password)
+    && /\d/.test(password)
+    && /[!@#$%^&*]/.test(password)
+}
+
 exports.getProfile = async (req, res) => {
   try {
     const userId = req.user.userId
@@ -212,13 +226,189 @@ exports.getAllUsers = async (req, res) => {
     }
 
     const users = await User.find({})
-      .select('name email role emailVerified')
+      .select('name email role emailVerified points lastActive createdAt')
       .sort({ createdAt: -1 })
 
     res.json(users)
   } catch (error) {
     console.error('Get all users error:', error)
     res.status(500).json({ message: 'Failed to fetch users' })
+  }
+}
+
+exports.getUserById = async (req, res) => {
+  try {
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ message: 'Admin access required' })
+    }
+
+    const user = await User.findById(req.params.id)
+      .populate('college', 'name type')
+      .select('-password')
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' })
+    }
+
+    res.json({ user })
+  } catch (error) {
+    console.error('Get user by id error:', error)
+    res.status(500).json({ message: 'Failed to fetch user' })
+  }
+}
+
+exports.createUserByAdmin = async (req, res) => {
+  try {
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ message: 'Admin access required' })
+    }
+
+    const {
+      name,
+      email,
+      password,
+      role = 'user',
+      emailVerified = true,
+      course,
+      yearOfStudy,
+      skills,
+      primaryCategory,
+      phone,
+      showContactToTeam
+    } = req.body
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: 'Name, email, and password are required' })
+    }
+
+    if (!emailIsValid(email)) {
+      return res.status(400).json({ message: 'Enter a valid email' })
+    }
+
+    if (!passwordIsStrong(password)) {
+      return res.status(400).json({
+        message: 'Password must be 8+ chars and include uppercase, lowercase, number, and symbol'
+      })
+    }
+
+    const existing = await User.findOne({ email: email.toLowerCase().trim() })
+    if (existing) {
+      return res.status(409).json({ message: 'Email already registered' })
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10)
+    const user = await User.create({
+      name: name.trim(),
+      email: email.toLowerCase().trim(),
+      password: hashedPassword,
+      role: role === 'admin' ? 'admin' : 'user',
+      emailVerified: Boolean(emailVerified),
+      course: course?.trim() || '',
+      yearOfStudy: yearOfStudy || '',
+      skills: Array.isArray(skills) ? skills : skills ? [skills] : [],
+      primaryCategory: primaryCategory || '',
+      phone: phone ? phone.toString().trim() : '',
+      showContactToTeam: Boolean(showContactToTeam)
+    })
+
+    res.status(201).json({
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        emailVerified: user.emailVerified
+      }
+    })
+  } catch (error) {
+    console.error('Create user by admin error:', error)
+    res.status(500).json({ message: 'Failed to create user' })
+  }
+}
+
+exports.updateUserByAdmin = async (req, res) => {
+  try {
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ message: 'Admin access required' })
+    }
+
+    const user = await User.findById(req.params.id)
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' })
+    }
+
+    const {
+      name,
+      role,
+      emailVerified,
+      points,
+      course,
+      yearOfStudy,
+      skills,
+      primaryCategory,
+      phone,
+      showContactToTeam
+    } = req.body
+
+    if (name !== undefined) user.name = name.toString().trim()
+    if (role) user.role = role === 'admin' ? 'admin' : 'user'
+    if (emailVerified !== undefined) user.emailVerified = Boolean(emailVerified)
+    if (points !== undefined && Number.isFinite(Number(points))) user.points = Number(points)
+    if (course !== undefined) user.course = course ? course.toString().trim() : ''
+    if (yearOfStudy !== undefined) user.yearOfStudy = yearOfStudy || ''
+    if (skills !== undefined) user.skills = Array.isArray(skills) ? skills : skills ? [skills] : []
+    if (primaryCategory !== undefined) user.primaryCategory = primaryCategory || ''
+    if (phone !== undefined) user.phone = phone ? phone.toString().trim() : ''
+    if (showContactToTeam !== undefined) user.showContactToTeam = Boolean(showContactToTeam)
+
+    await user.save()
+
+    res.json({
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        emailVerified: user.emailVerified,
+        points: user.points
+      }
+    })
+  } catch (error) {
+    console.error('Update user by admin error:', error)
+    res.status(500).json({ message: 'Failed to update user' })
+  }
+}
+
+exports.deleteUserByAdmin = async (req, res) => {
+  try {
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ message: 'Admin access required' })
+    }
+
+    const user = await User.findById(req.params.id)
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' })
+    }
+
+    const Project = require('../models/Project')
+    const ownedCount = await Project.countDocuments({ owner: user._id })
+    if (ownedCount > 0) {
+      return res.status(400).json({
+        message: 'User owns projects. Transfer ownership or delete those projects first.'
+      })
+    }
+
+    await Project.updateMany(
+      { teamMembers: user._id },
+      { $pull: { teamMembers: user._id, interestedUsers: user._id } }
+    )
+
+    await user.deleteOne()
+
+    res.json({ message: 'User deleted' })
+  } catch (error) {
+    console.error('Delete user by admin error:', error)
+    res.status(500).json({ message: 'Failed to delete user' })
   }
 }
 

@@ -9,7 +9,11 @@ const {
   getUserProjects,
   getAllUsers,
   getUserActivity,
-  getAdminStats
+  getAdminStats,
+  getUserById,
+  createUserByAdmin,
+  updateUserByAdmin,
+  deleteUserByAdmin
 } = require('../controllers/userController')
 
 router.get('/me', getProfile)
@@ -21,5 +25,9 @@ router.get('/projects', getUserProjects)
 router.get('/all', getAllUsers)
 router.get('/activity', getUserActivity)
 router.get('/admin-stats', getAdminStats)
+router.get('/:id', getUserById)
+router.post('/', createUserByAdmin)
+router.patch('/:id', updateUserByAdmin)
+router.delete('/:id', deleteUserByAdmin)
 
 module.exports = router
