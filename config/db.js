@@ -1,7 +1,6 @@
 const mongoose = require('mongoose')
 
 mongoose.set('strictQuery', true)
-mongoose.set('sanitizeFilter', true)
 
 function connectDB(uri) {
   return mongoose.connect(uri, {
