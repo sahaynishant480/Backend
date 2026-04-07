@@ -10,12 +10,16 @@ const shortText = z.string().min(1).max(200)
 const optionalText = z.string().max(2000).optional()
 const optionalString = z.string().optional()
 const emptyBody = z.object({}).strict()
+const optionalObjectIdOrAll = z.string().optional().refine(
+  (value) => !value || value === 'all' || objectId.safeParse(value).success,
+  { message: 'Invalid id' }
+)
 const paginationQuery = z.object({
   page: z.string().optional(),
   limit: z.string().optional()
 })
 const projectsQuery = z.object({
-  college: optionalString,
+  college: optionalObjectIdOrAll,
   category: optionalString,
   skills: optionalString,
   roles: optionalString,

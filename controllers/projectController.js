@@ -1,5 +1,6 @@
 const fs = require('fs')
 const path = require('path')
+const mongoose = require('mongoose')
 const Project = require('../models/Project')
 const User = require('../models/User')
 const { createNotification } = require('./notificationController')
@@ -201,6 +202,9 @@ exports.getProjects = async (req, res) => {
     }
 
     if (college && college !== 'all') {
+      if (!mongoose.Types.ObjectId.isValid(college)) {
+        return res.status(400).json({ message: 'Invalid college filter' })
+      }
       filter.college = college
     }
 
@@ -208,7 +212,7 @@ exports.getProjects = async (req, res) => {
       filter.category = category
     }
 
-    if (skills) {
+    if (skills && skills !== 'all') {
       const skillsArray = Array.isArray(skills)
         ? skills
         : skills.split(',').map((skill) => skill.trim()).filter(Boolean)
@@ -217,7 +221,7 @@ exports.getProjects = async (req, res) => {
       }
     }
 
-    if (roles) {
+    if (roles && roles !== 'all') {
       const rolesArray = Array.isArray(roles)
         ? roles
         : roles.split(',').map((role) => role.trim()).filter(Boolean)
