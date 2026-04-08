@@ -1,4 +1,5 @@
 const rateLimit = require('express-rate-limit')
+const { ipKeyGenerator } = require('express-rate-limit')
 const { logSecurityEvent } = require('./securityLogger')
 
 const getClientIp = (req) =>
@@ -14,7 +15,11 @@ const createLimiter = (options) =>
     standardHeaders: true,
     legacyHeaders: false,
     message: { message: options.message || 'Too many requests' },
-    keyGenerator: getClientIp,
+    keyGenerator: (req, res) => {
+      const ip = getClientIp(req) || req.ip
+      const proxyReq = Object.assign(Object.create(req), { ip })
+      return ipKeyGenerator(proxyReq, res)
+    },
     handler: (req, res) => {
       logSecurityEvent('rate_limit', req, {
         limit: options.max,
