@@ -17,8 +17,7 @@ const createLimiter = (options) =>
     message: { message: options.message || 'Too many requests' },
     keyGenerator: (req, res) => {
       const ip = getClientIp(req) || req.ip
-      const proxyReq = Object.assign(Object.create(req), { ip })
-      return ipKeyGenerator(proxyReq, res)
+      return ipKeyGenerator({ ip }, res)
     },
     handler: (req, res) => {
       logSecurityEvent('rate_limit', req, {
