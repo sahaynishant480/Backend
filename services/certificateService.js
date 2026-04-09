@@ -36,7 +36,7 @@ const generateCertificatePdf = async ({ userName, projectTitle, collegeName, iss
   const filePath = path.join(certificatesDir, filename)
 
   await new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 50 })
+    const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 40 })
     const stream = fs.createWriteStream(filePath)
     doc.pipe(stream)
 
@@ -52,16 +52,18 @@ const generateCertificatePdf = async ({ userName, projectTitle, collegeName, iss
 
     const templatePath = path.join(__dirname, '..', 'assets', 'certificate-template.png')
     if (fs.existsSync(templatePath)) {
-      doc.image(templatePath, 0, 0, { width: pageWidth, height: pageHeight })
+      doc.image(templatePath, 0, 0, { fit: [pageWidth, pageHeight], align: 'center', valign: 'center' })
     } else {
       doc.rect(20, 20, pageWidth - 40, pageHeight - 40).lineWidth(2).stroke('#6C5CE7')
     }
 
-    centerText('This certifies that', pageHeight * 0.36, 14)
-    centerText(userName, pageHeight * 0.43, 34, 'Times-Italic')
+    let y = pageHeight * 0.35
+    centerText('This certifies that', y, 14)
+    y += 40
+    centerText(userName, y, 34, 'Times-Italic')
 
-    const lineWidth = pageWidth * 0.42
-    const lineY = pageHeight * 0.49
+    const lineWidth = pageWidth * 0.45
+    const lineY = y + 40
     doc
       .moveTo((pageWidth - lineWidth) / 2, lineY)
       .lineTo((pageWidth + lineWidth) / 2, lineY)
@@ -69,16 +71,21 @@ const generateCertificatePdf = async ({ userName, projectTitle, collegeName, iss
       .strokeColor('#111827')
       .stroke()
 
-    centerText('is actively working on the project', pageHeight * 0.52, 13)
-    centerText(`"${projectTitle}"`, pageHeight * 0.57, 16, 'Times-Italic')
-    centerText(`which has entered the Validation phase on ${formatDate(issuedAt)}.`, pageHeight * 0.62, 13)
+    y = lineY + 18
+    centerText('is actively working on the project', y, 13)
+    y += 30
+    centerText(`"${projectTitle}"`, y, 16, 'Times-Italic')
+    y += 30
+    centerText(`which has entered the Validation phase on ${formatDate(issuedAt)}.`, y, 12)
+    y += 28
 
     if (collegeName) {
-      centerText(`College: ${collegeName}`, pageHeight * 0.68, 12)
+      centerText(`College: ${collegeName}`, y, 12)
     }
 
-    centerText(`Certificate ID: ${certificateId}`, pageHeight * 0.86, 9, 'Times-Roman', '#374151')
-    centerText(`Verify: ${buildVerificationUrl(certificateId)}`, pageHeight * 0.89, 9, 'Times-Roman', '#374151')
+    const footerY = pageHeight * 0.88
+    centerText(`Certificate ID: ${certificateId}`, footerY, 9, 'Times-Roman', '#374151')
+    centerText(`Verify: ${buildVerificationUrl(certificateId)}`, footerY + 16, 9, 'Times-Roman', '#374151')
 
     doc.end()
     stream.on('finish', resolve)
