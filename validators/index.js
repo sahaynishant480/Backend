@@ -176,11 +176,25 @@ const messageBody = z.object({
 const validationSubmitBody = z.object({
   rating: numericScore.optional(),
   criteria: z.object({
+    problemClarity: numericScore,
+    userPainSeverity: numericScore,
+    solutionFit: numericScore,
     innovation: numericScore,
     usefulness: numericScore,
-    execution: numericScore
+    executionReadiness: numericScore,
+    feasibility30Days: numericScore,
+    evidenceStrength: numericScore,
+    scalabilityPotential: numericScore,
+    teamReadiness: numericScore,
+    confidence: numericScore,
+    wouldUse: z.enum(['yes', 'maybe', 'no']),
+    finalVerdict: z.enum(['pass', 'rework', 'hold'])
   }),
   feedback: text,
+  topStrengths: text,
+  topGaps: text,
+  biggestRisk: text,
+  next7DayAction: text,
   projectId: optionalId
 }).passthrough()
 

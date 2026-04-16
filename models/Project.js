@@ -89,9 +89,35 @@ const ProjectSchema = new mongoose.Schema({
     currentReviews: { type: Number, default: 0 },
     averageRating: { type: Number, default: 0 },
     criteriaAverages: {
+      problemClarity: { type: Number, default: 0 },
+      userPainSeverity: { type: Number, default: 0 },
+      solutionFit: { type: Number, default: 0 },
       innovation: { type: Number, default: 0 },
       usefulness: { type: Number, default: 0 },
-      execution: { type: Number, default: 0 }
+      executionReadiness: { type: Number, default: 0 },
+      feasibility30Days: { type: Number, default: 0 },
+      evidenceStrength: { type: Number, default: 0 },
+      scalabilityPotential: { type: Number, default: 0 },
+      teamReadiness: { type: Number, default: 0 },
+      confidence: { type: Number, default: 0 }
+    },
+    dimensionAverages: {
+      desirability: { type: Number, default: 0 },
+      feasibility: { type: Number, default: 0 },
+      differentiation: { type: Number, default: 0 },
+      readiness: { type: Number, default: 0 }
+    },
+    signalBreakdown: {
+      wouldUse: {
+        yes: { type: Number, default: 0 },
+        maybe: { type: Number, default: 0 },
+        no: { type: Number, default: 0 }
+      },
+      verdict: {
+        pass: { type: Number, default: 0 },
+        rework: { type: Number, default: 0 },
+        hold: { type: Number, default: 0 }
+      }
     },
     demoLink: { type: String },
     demoNotes: { type: String },
@@ -107,11 +133,25 @@ const ProjectSchema = new mongoose.Schema({
       reviewer: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
       rating: { type: Number, min: 1, max: 5, required: true },
       criteria: {
-        innovation: { type: Number, min: 1, max: 5, required: true },
-        usefulness: { type: Number, min: 1, max: 5, required: true },
-        execution: { type: Number, min: 1, max: 5, required: true }
+        problemClarity: { type: Number, min: 1, max: 5 },
+        userPainSeverity: { type: Number, min: 1, max: 5 },
+        solutionFit: { type: Number, min: 1, max: 5 },
+        innovation: { type: Number, min: 1, max: 5 },
+        usefulness: { type: Number, min: 1, max: 5 },
+        executionReadiness: { type: Number, min: 1, max: 5 },
+        feasibility30Days: { type: Number, min: 1, max: 5 },
+        evidenceStrength: { type: Number, min: 1, max: 5 },
+        scalabilityPotential: { type: Number, min: 1, max: 5 },
+        teamReadiness: { type: Number, min: 1, max: 5 },
+        confidence: { type: Number, min: 1, max: 5 },
+        wouldUse: { type: String, enum: ['yes', 'maybe', 'no'] },
+        finalVerdict: { type: String, enum: ['pass', 'rework', 'hold'] }
       },
       feedback: { type: String, required: true },
+      topStrengths: { type: String },
+      topGaps: { type: String },
+      biggestRisk: { type: String },
+      next7DayAction: { type: String },
       helpful: { type: Boolean, default: false },
       createdAt: { type: Date, default: Date.now }
     }],

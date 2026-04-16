@@ -1143,9 +1143,27 @@ exports.startValidation = async (req, res) => {
     project.validation.currentReviews = 0
     project.validation.averageRating = 0
     project.validation.criteriaAverages = {
+      problemClarity: 0,
+      userPainSeverity: 0,
+      solutionFit: 0,
       innovation: 0,
       usefulness: 0,
-      execution: 0
+      executionReadiness: 0,
+      feasibility30Days: 0,
+      evidenceStrength: 0,
+      scalabilityPotential: 0,
+      teamReadiness: 0,
+      confidence: 0
+    }
+    project.validation.dimensionAverages = {
+      desirability: 0,
+      feasibility: 0,
+      differentiation: 0,
+      readiness: 0
+    }
+    project.validation.signalBreakdown = {
+      wouldUse: { yes: 0, maybe: 0, no: 0 },
+      verdict: { pass: 0, rework: 0, hold: 0 }
     }
     project.validation.reviews = []
     project.validation.validationStatus = 'pending'
@@ -1296,9 +1314,27 @@ exports.removeFromValidation = async (req, res) => {
     project.validation.currentReviews = 0
     project.validation.averageRating = 0
     project.validation.criteriaAverages = {
+      problemClarity: 0,
+      userPainSeverity: 0,
+      solutionFit: 0,
       innovation: 0,
       usefulness: 0,
-      execution: 0
+      executionReadiness: 0,
+      feasibility30Days: 0,
+      evidenceStrength: 0,
+      scalabilityPotential: 0,
+      teamReadiness: 0,
+      confidence: 0
+    }
+    project.validation.dimensionAverages = {
+      desirability: 0,
+      feasibility: 0,
+      differentiation: 0,
+      readiness: 0
+    }
+    project.validation.signalBreakdown = {
+      wouldUse: { yes: 0, maybe: 0, no: 0 },
+      verdict: { pass: 0, rework: 0, hold: 0 }
     }
     project.validation.reviews = []
     project.validation.validationStatus = 'pending'
@@ -1360,9 +1396,27 @@ exports.extendValidationTimeline = async (req, res) => {
     project.validation.currentReviews = 0
     project.validation.averageRating = 0
     project.validation.criteriaAverages = {
+      problemClarity: 0,
+      userPainSeverity: 0,
+      solutionFit: 0,
       innovation: 0,
       usefulness: 0,
-      execution: 0
+      executionReadiness: 0,
+      feasibility30Days: 0,
+      evidenceStrength: 0,
+      scalabilityPotential: 0,
+      teamReadiness: 0,
+      confidence: 0
+    }
+    project.validation.dimensionAverages = {
+      desirability: 0,
+      feasibility: 0,
+      differentiation: 0,
+      readiness: 0
+    }
+    project.validation.signalBreakdown = {
+      wouldUse: { yes: 0, maybe: 0, no: 0 },
+      verdict: { pass: 0, rework: 0, hold: 0 }
     }
     project.validation.reviews = []
     project.validation.validatedAt = undefined
