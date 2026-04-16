@@ -59,7 +59,7 @@ const ProjectSchema = new mongoose.Schema({
   status: { 
     type: String, 
     required: true,
-    enum: ['planning', 'building', 'completed', 'validation', 'validated', 'archived'],
+    enum: ['planning', 'building', 'completed', 'validation', 'validated', 'validation_failed', 'archived'],
     default: 'planning'
   },
   owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
@@ -76,7 +76,11 @@ const ProjectSchema = new mongoose.Schema({
     endDate: { type: Date },
     isActive: { type: Boolean, default: true },
     lastActivity: { type: Date, default: Date.now },
-    lastPenaltyAt: { type: Date }
+    lastPenaltyAt: { type: Date },
+    totalDurationDays: { type: Number, default: 14 },
+    isExtendedTimeline: { type: Boolean, default: false },
+    extensionCount: { type: Number, default: 0 },
+    extensionDaysGranted: { type: Number, default: 0 }
   },
   
   // Validation System
@@ -84,6 +88,11 @@ const ProjectSchema = new mongoose.Schema({
     reviewsRequired: { type: Number, default: 30 },
     currentReviews: { type: Number, default: 0 },
     averageRating: { type: Number, default: 0 },
+    criteriaAverages: {
+      innovation: { type: Number, default: 0 },
+      usefulness: { type: Number, default: 0 },
+      execution: { type: Number, default: 0 }
+    },
     demoLink: { type: String },
     demoNotes: { type: String },
     sharedFiles: [{
@@ -97,6 +106,11 @@ const ProjectSchema = new mongoose.Schema({
     reviews: [{
       reviewer: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
       rating: { type: Number, min: 1, max: 5, required: true },
+      criteria: {
+        innovation: { type: Number, min: 1, max: 5, required: true },
+        usefulness: { type: Number, min: 1, max: 5, required: true },
+        execution: { type: Number, min: 1, max: 5, required: true }
+      },
       feedback: { type: String, required: true },
       helpful: { type: Boolean, default: false },
       createdAt: { type: Date, default: Date.now }
@@ -113,6 +127,8 @@ const ProjectSchema = new mongoose.Schema({
       filename: { type: String, required: true },
       issuedAt: { type: Date, default: Date.now }
     }],
+    completionAwarded: { type: Boolean, default: false },
+    lastFailureReason: { type: String },
     validatedAt: Date,
     featuredAt: Date
   },

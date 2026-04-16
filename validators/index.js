@@ -10,6 +10,7 @@ const text = z.string().min(1).max(1000)
 const shortText = z.string().min(1).max(200)
 const optionalText = z.string().max(2000).optional()
 const optionalString = z.string().optional()
+const numericScore = z.union([z.number(), z.string()])
 const emptyBody = z.object({}).strict()
 const optionalObjectIdOrAll = z.string().optional().refine(
   (value) => !value || value === 'all' || objectId.safeParse(value).success,
@@ -173,7 +174,12 @@ const messageBody = z.object({
 }).passthrough()
 
 const validationSubmitBody = z.object({
-  rating: z.union([z.number(), z.string()]),
+  rating: numericScore.optional(),
+  criteria: z.object({
+    innovation: numericScore,
+    usefulness: numericScore,
+    execution: numericScore
+  }),
   feedback: text,
   projectId: optionalId
 }).passthrough()
@@ -183,6 +189,8 @@ const startValidationBody = z.object({
   demoNotes: optionalString,
   sharedFileIds: z.union([z.array(z.string()), z.string()]).optional()
 }).passthrough()
+
+const retryValidationBody = z.object({}).passthrough()
 
 const markHelpfulBody = z.object({})
 
@@ -250,6 +258,7 @@ module.exports = {
     messageBody,
     validationSubmitBody,
     startValidationBody,
+    retryValidationBody,
     markHelpfulBody
   }
 }

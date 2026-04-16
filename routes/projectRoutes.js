@@ -26,7 +26,8 @@ const {
   getProjectOptions,
   updateProjectRequirements,
   updateProjectDetails,
-  removeFromValidation
+  removeFromValidation,
+  extendValidationTimeline
 } = require('../controllers/projectController')
 const validate = require('../middleware/validate')
 const { requireProjectOwner, requireTeamMember } = require('../middleware/projectAuth')
@@ -58,6 +59,7 @@ router.put('/:id/details', validate(z.object({ params: z.object({ id: objectId }
 router.put('/:id/requirements', validate(z.object({ params: z.object({ id: objectId }), body: project.updateProjectRequirementsBody })), requireProjectOwner, updateProjectRequirements)
 router.post('/:id/validate', validate(z.object({ params: z.object({ id: objectId }), body: project.startValidationBody })), requireProjectOwner, startValidation)
 router.post('/:id/validation/remove', validate(z.object({ params: z.object({ id: objectId }) })), requireProjectOwner, removeFromValidation)
+router.post('/:id/validation/extend', validate(z.object({ params: z.object({ id: objectId }), body: project.retryValidationBody })), requireProjectOwner, extendValidationTimeline)
 router.post('/:id/start-build', validate(z.object({ params: z.object({ id: objectId }) })), requireProjectOwner, startBuildPhase)
 router.post('/:id/complete', validate(z.object({ params: z.object({ id: objectId }) })), requireProjectOwner, completeProject)
 router.post('/:id/update-activity', validate(z.object({ params: z.object({ id: objectId }) })), requireTeamMember, updateActivity)

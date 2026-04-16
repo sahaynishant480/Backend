@@ -152,7 +152,11 @@ exports.createProject = async (req, res) => {
         startDate: new Date(),
         endDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
         isActive: true,
-        lastActivity: new Date()
+        lastActivity: new Date(),
+        totalDurationDays: 14,
+        isExtendedTimeline: false,
+        extensionCount: 0,
+        extensionDaysGranted: 0
       },
       techProduct: category === 'Tech & Product' ? techProduct : undefined,
       businessStartup: category === 'Business & Startup' ? businessStartup : undefined,
@@ -530,6 +534,10 @@ exports.addTeamMember = async (req, res) => {
       project.buildPhase.endDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
       project.buildPhase.isActive = true
       project.buildPhase.lastActivity = new Date()
+      project.buildPhase.totalDurationDays = 14
+      project.buildPhase.isExtendedTimeline = false
+      project.buildPhase.extensionCount = 0
+      project.buildPhase.extensionDaysGranted = 0
     }
     const remainingInterested = [...project.interestedUsers]
     if (teamCount >= maxTeamMembers && remainingInterested.length > 0) {
@@ -876,7 +884,7 @@ exports.deleteProject = async (req, res) => {
     const ownerId = project.owner.toString()
     const teamIds = (project.teamMembers || []).map((member) => member.toString())
     const uniqueUserIds = Array.from(new Set([ownerId, ...teamIds]))
-    const shouldDeductComplete = ['completed', 'validation', 'validated', 'archived'].includes(project.status)
+    const shouldDeductComplete = ['completed', 'validated'].includes(project.status)
 
     for (const userId of uniqueUserIds) {
       const user = await User.findById(userId)
@@ -1038,7 +1046,11 @@ exports.startBuildPhase = async (req, res) => {
       endDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
       isActive: true,
       lastActivity: new Date(),
-      lastPenaltyAt: project.buildPhase?.lastPenaltyAt
+      lastPenaltyAt: project.buildPhase?.lastPenaltyAt,
+      totalDurationDays: 14,
+      isExtendedTimeline: false,
+      extensionCount: 0,
+      extensionDaysGranted: 0
     }
 
     await project.save()
@@ -1064,21 +1076,14 @@ exports.completeProject = async (req, res) => {
       return res.status(403).json({ message: 'Only the project owner can complete the project' })
     }
 
-    if (project.status === 'completed' || project.status === 'validation' || project.status === 'validated') {
-      return res.status(400).json({ message: 'Project already completed' })
+    if (project.status === 'validated') {
+      return res.status(400).json({ message: 'Project is already validated' })
     }
 
-    project.status = 'completed'
-    project.buildPhase.isActive = false
-
-    await project.save()
-
-    await applyUserStats(project.owner, {
-      points: POINTS.complete_project,
-      inc: { projectsCompleted: 1 }
+    // Completion is now tied to successful validation.
+    res.status(400).json({
+      message: 'Projects are marked complete only after passing validation. Use "Validate Project" from Team Workspace.'
     })
-
-    res.json({ message: 'Project marked as completed', project })
   } catch (error) {
     console.error('Complete project error:', error)
     res.status(500).json({ message: 'Failed to complete project' })
@@ -1119,21 +1124,43 @@ exports.startValidation = async (req, res) => {
       return res.status(400).json({ message: 'Project already in validation' })
     }
 
-    if (project.status !== 'completed') {
-      await applyUserStats(project.owner, {
-        points: POINTS.complete_project,
-        inc: { projectsCompleted: 1 }
+    if (project.status === 'validation_failed') {
+      return res.status(400).json({
+        message: 'This project needs rework. Use the extend timeline option before sending it to validation again.'
       })
     }
 
+    if (!['building', 'completed'].includes(project.status)) {
+      return res.status(400).json({ message: 'Project must be in build phase before validation' })
+    }
+
+    const previousStatus = project.status
     project.status = 'validation'
     project.buildPhase.isActive = false
     if (!project.validation) {
       project.validation = {}
     }
+    project.validation.currentReviews = 0
+    project.validation.averageRating = 0
+    project.validation.criteriaAverages = {
+      innovation: 0,
+      usefulness: 0,
+      execution: 0
+    }
+    project.validation.reviews = []
     project.validation.validationStatus = 'pending'
-    project.validation.demoLink = demoLink ? demoLink.trim() : project.validation.demoLink
-    project.validation.demoNotes = demoNotes ? demoNotes.trim() : project.validation.demoNotes
+    project.validation.validatedAt = undefined
+    project.validation.featuredAt = undefined
+    project.validation.lastFailureReason = undefined
+    if (previousStatus === 'completed' && !project.validation.completionAwarded) {
+      project.validation.completionAwarded = true
+    }
+    if (typeof demoLink === 'string') {
+      project.validation.demoLink = demoLink.trim()
+    }
+    if (typeof demoNotes === 'string') {
+      project.validation.demoNotes = demoNotes.trim()
+    }
 
     const selectedIds = Array.isArray(sharedFileIds)
       ? sharedFileIds
@@ -1145,6 +1172,8 @@ exports.startValidation = async (req, res) => {
         selectedIds.includes(file._id?.toString()) || selectedIds.includes(file.filename)
       )
       project.validation.sharedFiles = selected
+    } else if (Array.isArray(sharedFileIds)) {
+      project.validation.sharedFiles = []
     }
 
     const memberIds = new Set([
@@ -1236,17 +1265,46 @@ exports.removeFromValidation = async (req, res) => {
       return res.status(400).json({ message: 'Project is not in validation' })
     }
 
-    project.status = 'completed'
-    project.buildPhase.isActive = false
+    const now = Date.now()
+    const existingEndDate = project.buildPhase?.endDate ? new Date(project.buildPhase.endDate).getTime() : 0
+    const hasRemainingTime = existingEndDate > now
+
+    project.status = 'building'
+    if (!project.buildPhase) {
+      project.buildPhase = {}
+    }
+    project.buildPhase.isActive = true
+    project.buildPhase.lastActivity = new Date()
+    project.buildPhase.totalDurationDays = project.buildPhase.totalDurationDays || 14
+    project.buildPhase.extensionCount = project.buildPhase.extensionCount || 0
+    project.buildPhase.extensionDaysGranted = project.buildPhase.extensionDaysGranted || 0
+    project.buildPhase.isExtendedTimeline = Boolean(project.buildPhase.extensionDaysGranted > 0)
+
+    if (!hasRemainingTime) {
+      const extensionDays = 7
+      project.buildPhase.startDate = new Date()
+      project.buildPhase.endDate = new Date(Date.now() + extensionDays * 24 * 60 * 60 * 1000)
+      project.buildPhase.extensionCount += 1
+      project.buildPhase.extensionDaysGranted += extensionDays
+      project.buildPhase.totalDurationDays = 14 + project.buildPhase.extensionDaysGranted
+      project.buildPhase.isExtendedTimeline = true
+    }
+
     if (!project.validation) {
       project.validation = {}
     }
     project.validation.currentReviews = 0
     project.validation.averageRating = 0
+    project.validation.criteriaAverages = {
+      innovation: 0,
+      usefulness: 0,
+      execution: 0
+    }
     project.validation.reviews = []
     project.validation.validationStatus = 'pending'
     project.validation.validatedAt = undefined
     project.validation.featuredAt = undefined
+    project.validation.lastFailureReason = undefined
 
     await project.save()
 
@@ -1259,6 +1317,82 @@ exports.removeFromValidation = async (req, res) => {
   } catch (error) {
     console.error('Remove validation error:', error)
     res.status(500).json({ message: 'Failed to remove project from validation' })
+  }
+}
+
+exports.extendValidationTimeline = async (req, res) => {
+  try {
+    const { id } = req.params
+    const requesterId = req.user?.userId
+    const extensionDays = 7
+
+    const project = await Project.findById(id)
+    if (!project) {
+      return res.status(404).json({ message: 'Project not found' })
+    }
+
+    if (!requesterId || project.owner.toString() !== requesterId.toString()) {
+      return res.status(403).json({ message: 'Only the project owner can extend the timeline' })
+    }
+
+    if (project.status !== 'validation_failed') {
+      return res.status(400).json({ message: 'Timeline extension is available only after a failed validation' })
+    }
+
+    if (!project.buildPhase) {
+      project.buildPhase = {}
+    }
+
+    project.status = 'building'
+    project.buildPhase.startDate = new Date()
+    project.buildPhase.endDate = new Date(Date.now() + extensionDays * 24 * 60 * 60 * 1000)
+    project.buildPhase.isActive = true
+    project.buildPhase.lastActivity = new Date()
+    project.buildPhase.extensionCount = (project.buildPhase.extensionCount || 0) + 1
+    project.buildPhase.extensionDaysGranted = (project.buildPhase.extensionDaysGranted || 0) + extensionDays
+    project.buildPhase.totalDurationDays = 14 + project.buildPhase.extensionDaysGranted
+    project.buildPhase.isExtendedTimeline = true
+
+    if (!project.validation) {
+      project.validation = {}
+    }
+    project.validation.validationStatus = 'pending'
+    project.validation.currentReviews = 0
+    project.validation.averageRating = 0
+    project.validation.criteriaAverages = {
+      innovation: 0,
+      usefulness: 0,
+      execution: 0
+    }
+    project.validation.reviews = []
+    project.validation.validatedAt = undefined
+    project.validation.featuredAt = undefined
+
+    await project.save()
+
+    await createNotification(
+      project.owner,
+      'validation_feedback',
+      'Timeline extended for rework',
+      `${project.title} has been moved back to the build phase with a 7-day extension.`,
+      project._id,
+      requesterId,
+      false,
+      `/project/${project._id}`
+    )
+
+    const populated = await Project.findById(project._id)
+      .populate('owner', 'name email')
+      .populate('teamMembers', 'name email')
+      .populate('interestedUsers', 'name email')
+
+    res.json({
+      message: 'Project moved back to dashboard with a 7-day extension',
+      project: populated
+    })
+  } catch (error) {
+    console.error('Extend validation timeline error:', error)
+    res.status(500).json({ message: 'Failed to extend project timeline' })
   }
 }
 
