@@ -65,6 +65,13 @@ const loginBody = z.object({
   password
 })
 
+const googleAuthBody = z.object({
+  credential: z.string().min(20),
+  college_id: optionalId,
+  collegeId: optionalId,
+  college: optionalId
+}).passthrough()
+
 const verifyEmailBody = z.object({
   email,
   otp
@@ -246,6 +253,7 @@ module.exports = {
   auth: {
     registerBody,
     loginBody,
+    googleAuthBody,
     verifyEmailBody,
     resendVerificationBody,
     forgotPasswordBody,

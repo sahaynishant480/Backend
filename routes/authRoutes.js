@@ -3,6 +3,7 @@ const router = express.Router()
 const {
   register,
   login,
+  googleAuth,
   forgotPassword,
   verifyResetOTP,
   resetPassword,
@@ -23,6 +24,7 @@ const { protect } = require('../middleware/authMiddleware')
 
 router.post('/register', authLimiter, validate(auth.registerBody), register)
 router.post('/login', authLimiter, validate(auth.loginBody), login)
+router.post('/google', authLimiter, validate(auth.googleAuthBody), googleAuth)
 router.post('/verify-email', otpLimiter, validate(auth.verifyEmailBody), verifyEmail)
 router.post('/resend-otp', otpLimiter, validate(auth.resendVerificationBody), resendVerificationOTP)
 router.post('/forgot-password', authLimiter, validate(auth.forgotPasswordBody), forgotPassword)

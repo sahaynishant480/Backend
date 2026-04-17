@@ -5,8 +5,10 @@ const jwtConfig = require('../config/jwt')
 const jwt = require('jsonwebtoken')
 const bcrypt = require('bcryptjs')
 const mongoose = require('mongoose')
+const { randomBytes } = require('crypto')
 const speakeasy = require('speakeasy')
 const qrcode = require('qrcode')
+const { OAuth2Client } = require('google-auth-library')
 const { sendEmail } = require('../services/emailService')
 const { setAuthCookie, clearAuthCookie } = require('../utils/authCookies')
 const { encrypt, decrypt } = require('../utils/crypto')
@@ -74,6 +76,23 @@ const buildVerifyLink = (email) => {
   const base = getFrontendBaseUrl()
   return `${base}/verify-email?email=${encodeURIComponent(email)}`
 }
+
+const getGoogleClientId = () => process.env.GOOGLE_CLIENT_ID?.trim()
+
+const toUserPayload = (user) => ({
+  id: user._id,
+  name: user.name,
+  email: user.email,
+  college: user.college ? { id: user.college._id, name: user.college.name, type: user.college.type } : null,
+  college_id: user.college_id || user.college?._id,
+  course: user.course,
+  yearOfStudy: user.yearOfStudy,
+  skills: user.skills,
+  primaryCategory: user.primaryCategory,
+  points: user.points,
+  badges: user.badges,
+  role: user.role
+})
 
 exports.register = async (req, res) => {
   try {
@@ -653,24 +672,161 @@ exports.login = async (req, res) => {
     setAuthCookie(res, token)
 
     res.status(200).json({
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        college: user.college ? { id: user.college._id, name: user.college.name, type: user.college.type } : null,
-        college_id: user.college_id || user.college?._id,
-        course: user.course,
-        yearOfStudy: user.yearOfStudy,
-        skills: user.skills,
-        primaryCategory: user.primaryCategory,
-        points: user.points,
-        badges: user.badges,
-        role: user.role
-      }
+      user: toUserPayload(user)
     })
   } catch (error) {
     console.error('Login error:', error)
     res.status(500).json({ message: 'Login failed' })
+  }
+}
+
+exports.googleAuth = async (req, res) => {
+  try {
+    const { credential, college_id, collegeId, college } = req.body
+    if (!credential || typeof credential !== 'string') {
+      return res.status(400).json({ message: 'Google credential is required' })
+    }
+
+    const googleClientId = getGoogleClientId()
+    if (!googleClientId) {
+      return res.status(500).json({ message: 'Google auth is not configured' })
+    }
+
+    let googlePayload
+    try {
+      const client = new OAuth2Client(googleClientId)
+      const ticket = await client.verifyIdToken({
+        idToken: credential,
+        audience: googleClientId
+      })
+      googlePayload = ticket.getPayload()
+    } catch (verifyError) {
+      logSecurityEvent('auth_failure', req, { reason: 'google_token_invalid' })
+      return res.status(401).json({ message: 'Invalid Google token' })
+    }
+
+    const googleEmail = googlePayload?.email?.toLowerCase().trim()
+    if (!googleEmail || !googlePayload?.email_verified || !googlePayload?.sub) {
+      logSecurityEvent('auth_failure', req, { reason: 'google_payload_invalid' })
+      return res.status(401).json({ message: 'Unable to verify Google account email' })
+    }
+
+    let selectedCollege = collegeId || college_id || college
+    selectedCollege = typeof selectedCollege === 'string' ? selectedCollege.trim() : selectedCollege
+    let selectedCollegeDoc = null
+    if (selectedCollege && selectedCollege !== 'null') {
+      if (!mongoose.Types.ObjectId.isValid(selectedCollege)) {
+        return res.status(400).json({ message: 'Invalid college selection' })
+      }
+      selectedCollegeDoc = await College.findById(selectedCollege)
+      if (!selectedCollegeDoc) {
+        return res.status(400).json({ message: 'Invalid college selection' })
+      }
+    }
+
+    let isNewUser = false
+    let user = await User.findOne({ email: googleEmail })
+      .select('+password +emailVerificationOTP +emailVerificationOTPHash +emailVerificationOTPAttempts')
+      .populate('college')
+
+    if (!user) {
+      isNewUser = true
+      const generatedPassword = `${randomBytes(24).toString('hex')}Aa1!`
+      const hashedPassword = await bcrypt.hash(generatedPassword, 10)
+      const ownerEmail = getOwnerEmail()
+      const defaultRole = ownerEmail && googleEmail === ownerEmail ? 'admin' : 'user'
+
+      user = new User({
+        name: (googlePayload.name || googleEmail.split('@')[0] || 'Google User').trim(),
+        email: googleEmail,
+        password: hashedPassword,
+        role: defaultRole,
+        authProvider: 'google',
+        googleId: googlePayload.sub,
+        emailVerified: true,
+        emailVerificationOTP: undefined,
+        emailVerificationOTPHash: undefined,
+        emailVerificationOTPAttempts: 0,
+        emailVerificationLastSent: undefined,
+        emailVerificationExpires: undefined,
+        college: selectedCollegeDoc?._id || undefined,
+        college_id: selectedCollegeDoc?._id || undefined,
+        course: '',
+        yearOfStudy: '',
+        skills: [],
+        primaryCategory: '',
+        phone: ''
+      })
+    } else {
+      if (user.googleId && user.googleId !== googlePayload.sub) {
+        logSecurityEvent('auth_failure', req, { reason: 'google_subject_mismatch', userId: user._id })
+        return res.status(401).json({ message: 'Google account does not match this user' })
+      }
+      if (!user.googleId) {
+        user.googleId = googlePayload.sub
+      }
+      if (!user.authProvider || user.authProvider === 'local') {
+        user.authProvider = 'google'
+      }
+
+      if (!user.emailVerified) {
+        user.emailVerified = true
+        user.emailVerificationOTP = undefined
+        user.emailVerificationOTPHash = undefined
+        user.emailVerificationOTPAttempts = 0
+        user.emailVerificationLastSent = undefined
+        user.emailVerificationExpires = undefined
+      }
+
+      if (!user.college && selectedCollegeDoc) {
+        user.college = selectedCollegeDoc._id
+        user.college_id = selectedCollegeDoc._id
+      }
+    }
+
+    if (!user.college_id && user.college) {
+      user.college_id = user.college._id || user.college
+    }
+    const ownerEmail = getOwnerEmail()
+    if (ownerEmail && user.email?.toLowerCase() === ownerEmail && user.role !== 'admin') {
+      user.role = 'admin'
+    }
+
+    user.lastActive = new Date()
+    await user.save()
+
+    if (!user.college || typeof user.college === 'string' || user.college instanceof mongoose.Types.ObjectId) {
+      user = await User.findById(user._id).populate('college')
+    }
+
+    if (user.role === 'admin' && user.twoFactorEnabled) {
+      const twoFactorToken = generateToken(
+        { userId: user._id, type: 'admin-2fa' },
+        process.env.JWT_SECRET,
+        { expiresIn: TWO_FACTOR_TOKEN_TTL }
+      )
+      return res.status(200).json({
+        message: 'Two-factor authentication required',
+        twoFactorRequired: true,
+        twoFactorToken
+      })
+    }
+
+    const token = generateToken(
+      { userId: user._id, email: user.email, tfa: user.role === 'admin' ? true : undefined },
+      process.env.JWT_SECRET,
+      { expiresIn: jwtConfig.accessExpiresIn }
+    )
+    setAuthCookie(res, token)
+
+    res.status(200).json({
+      message: isNewUser ? 'Google account connected successfully' : 'Logged in with Google',
+      isNewUser,
+      user: toUserPayload(user)
+    })
+  } catch (error) {
+    console.error('googleAuth error:', error)
+    res.status(500).json({ message: 'Google authentication failed' })
   }
 }
 
