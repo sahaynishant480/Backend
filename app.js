@@ -14,7 +14,37 @@ app.set('trust proxy', 1)
 app.disable('x-powered-by')
 
 app.use(helmet({
-  crossOriginResourcePolicy: { policy: 'cross-origin' }
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      scriptSrc: [
+        "'self'",
+        'https://accounts.google.com',
+        'https://apis.google.com'
+      ],
+      scriptSrcElem: [
+        "'self'",
+        'https://accounts.google.com',
+        'https://apis.google.com'
+      ],
+      connectSrc: [
+        "'self'",
+        'https://accounts.google.com',
+        'https://oauth2.googleapis.com'
+      ],
+      frameSrc: [
+        "'self'",
+        'https://accounts.google.com'
+      ],
+      imgSrc: [
+        "'self'",
+        'data:',
+        'https://*.gstatic.com',
+        'https://*.googleusercontent.com'
+      ]
+    }
+  }
 }))
 app.use(mongoSanitize({ replaceWith: '_' }))
 app.use(cookieParser())
