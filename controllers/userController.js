@@ -31,6 +31,7 @@ exports.getProfile = async (req, res) => {
       id: user._id,
       name: user.name,
       email: user.email,
+      sprintStatus: user.sprintStatus || 'none',
       college: user.college ? { id: user.college._id, name: user.college.name, type: user.college.type } : null,
       college_id: user.college_id || user.college?._id,
       course: user.course,
