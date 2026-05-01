@@ -8,7 +8,13 @@ const { protect } = require('./middleware/authMiddleware')
 const { errorHandler, notFound } = require('./middleware/errorMiddleware')
 const { apiLimiter } = require('./middleware/rateLimiters')
 const { requestLogger } = require('./middleware/securityLogger')
+<<<<<<< HEAD
 const app = express()
+=======
+const { createAuthAttemptLimiter } = require('./middleware/authRateLimiter')
+const app = express()
+const authAttemptLimiter = createAuthAttemptLimiter()
+>>>>>>> 2cbdbc2 (Harden auth brute-force protection with Redis-backed limiter)
 
 app.set('trust proxy', 1)
 app.disable('x-powered-by')
@@ -97,6 +103,11 @@ app.get('/', (req, res) => res.send('API running'))
 
 // Auth routes
 const authRoutes = require('./routes/authRoutes')
+<<<<<<< HEAD
+=======
+app.post('/api/auth/login', authAttemptLimiter)
+app.post('/api/auth/google', authAttemptLimiter)
+>>>>>>> 2cbdbc2 (Harden auth brute-force protection with Redis-backed limiter)
 app.use('/auth', authRoutes)
 app.use('/api/auth', authRoutes)
 
