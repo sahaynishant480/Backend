@@ -261,6 +261,16 @@ const checkpointProjectParams = z.object({
   projectId: objectId
 })
 
+const checkpointUpdateParams = z.object({
+  projectId: objectId,
+  phase: checkpointPhase
+})
+
+const checkpointUpdateBody = z.object({
+  submissionLink: z.string().url(),
+  description: z.string().max(2000).optional()
+}).passthrough()
+
 module.exports = {
   objectId,
   emptyBody,
@@ -308,6 +318,8 @@ module.exports = {
   },
   checkpoint: {
     checkpointSubmitBody,
-    checkpointProjectParams
+    checkpointProjectParams,
+    checkpointUpdateParams,
+    checkpointUpdateBody
   }
 }
