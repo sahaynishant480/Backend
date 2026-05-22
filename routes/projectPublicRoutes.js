@@ -1,15 +1,7 @@
 const express = require('express')
-const { z } = require('zod')
-const validate = require('../middleware/validate')
-const { objectId } = require('../validators')
-const { getProjectProof } = require('../controllers/projectController')
-
 const router = express.Router()
 
-router.get(
-  '/:id/proof',
-  validate(z.object({ params: z.object({ id: objectId }) })),
-  getProjectProof
-)
+// Public proof pages were removed for launch. Keep this router loadable so
+// existing app mounts do not crash while protected workspace routes remain active.
 
 module.exports = router

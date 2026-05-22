@@ -6,18 +6,26 @@ const WINDOW_MS = 15 * 60 * 1000
 const MAX_ATTEMPTS = 5
 
 function createAuthAttemptLimiter() {
+  let store
+  try {
+    const redisClient = getRedisClient()
+    store = new RedisStore({
+      sendCommand: (...args) => redisClient.sendCommand(args),
+      prefix: 'rl:auth:'
+    })
+  } catch (error) {
+    console.warn('[auth-rate-limit] Redis unavailable; using in-memory limiter:', error.message)
+  }
+
   return rateLimit({
     windowMs: WINDOW_MS,
     limit: MAX_ATTEMPTS,
     standardHeaders: 'draft-6',
     legacyHeaders: false,
-    passOnStoreError: false,
+    passOnStoreError: true,
     skipSuccessfulRequests: true,
     keyGenerator: (req) => ipKeyGenerator(req.ip, 56),
-    store: new RedisStore({
-      sendCommand: (...args) => getRedisClient().sendCommand(args),
-      prefix: 'rl:auth:'
-    }),
+    ...(store ? { store } : {}),
     handler: (req, res, _next, options) => {
       const retryAfterSeconds = req.rateLimit?.resetTime
         ? Math.max(1, Math.ceil((req.rateLimit.resetTime.getTime() - Date.now()) / 1000))
