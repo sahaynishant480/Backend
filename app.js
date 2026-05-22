@@ -63,6 +63,8 @@ const envOrigins = (process.env.CORS_ORIGINS || '')
   .filter(Boolean)
 
 const allowedOrigins = new Set([
+  'https://collab.qzz.io',
+  'https://www.collab.qzz.io',
   'https://collab-frontend-five.vercel.app',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
