@@ -2597,7 +2597,7 @@ exports.applyContinuationAction = async (req, res) => {
     }
 
     if (currentStage !== nextStage && !canTransitionLifecycle(currentStage, nextStage)) {
-      const relaxedContinuationTargets = new Set(['planning', 'building', 'validation', 'mvp', 'pivoted', 'archived'])
+      const relaxedContinuationTargets = new Set(['planning', 'building', 'validation', 'mvp', 'incubation_ready', 'pivoted', 'archived'])
       if (!relaxedContinuationTargets.has(nextStage)) {
         return res.status(400).json({ message: `Cannot move from ${getLifecycleLabel(currentStage)} to ${getLifecycleLabel(nextStage)}` })
       }
