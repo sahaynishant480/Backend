@@ -142,6 +142,11 @@ const notificationRoutes = require('./routes/notificationRoutes')
 app.use('/notifications', protect, notificationRoutes)
 app.use('/api/notifications', protect, notificationRoutes)
 
+// Shared execution feed routes (protected)
+const feedRoutes = require('./routes/feedRoutes')
+app.use('/feed', protect, feedRoutes)
+app.use('/api/feed', protect, feedRoutes)
+
 app.use(notFound)
 app.use(errorHandler)
 
