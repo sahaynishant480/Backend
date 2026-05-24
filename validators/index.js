@@ -8,9 +8,9 @@ const twoFactorCode = z.string().min(6).max(8)
 const password = z.string().min(8).max(128)
 const text = z.string().min(1).max(1000)
 const shortText = z.string().min(1).max(200)
-const executionPlanText = z.string().min(1).max(6000)
+const longText = z.string().min(1).max(16000)
+const optionalLongText = z.string().max(16000).optional()
 const optionalText = z.string().max(2000).optional()
-const optionalExecutionPlanText = z.string().max(6000).optional()
 const optionalString = z.string().optional()
 const optionalStringList = z.union([z.array(z.string()), z.string()]).optional()
 const numericScore = z.union([z.number(), z.string()])
@@ -135,14 +135,14 @@ const changePasswordBody = z.object({
 const createProjectBody = z.object({
   title: text,
   shortPitch: shortText,
-  description: optionalText,
+  description: optionalLongText,
   category: text,
   tags: z.union([z.array(z.string()), z.string()]).optional(),
   rolesNeeded: z.union([z.array(z.string()), z.string()]).optional(),
   skillsRequired: z.union([z.array(z.string()), z.string()]).optional(),
   numberOfTeammates: z.union([z.number(), z.string()]).optional(),
   visibility: optionalString,
-  executionPlan: executionPlanText,
+  executionPlan: longText,
   techProduct: z.any().optional(),
   businessStartup: z.any().optional(),
   designCreative: z.any().optional(),
@@ -153,9 +153,9 @@ const createProjectBody = z.object({
 const updateProjectDetailsBody = z.object({
   title: optionalString,
   shortPitch: optionalString,
-  description: optionalString,
+  description: optionalLongText,
   tags: z.union([z.array(z.string()), z.string()]).optional(),
-  executionPlan: optionalExecutionPlanText
+  executionPlan: optionalLongText
 }).passthrough()
 
 const updateValidationWorkspaceBody = z.object({
