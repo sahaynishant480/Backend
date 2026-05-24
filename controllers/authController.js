@@ -52,6 +52,16 @@ const buildVerifyLink = (email) => {
 }
 
 const getGoogleClientId = () => process.env.GOOGLE_CLIENT_ID?.trim()
+const isEmailVerificationEnabled = () => process.env.EMAIL_VERIFICATION_ENABLED === 'true'
+
+const clearEmailVerificationFields = (user) => {
+  user.emailVerified = true
+  user.emailVerificationOTP = undefined
+  user.emailVerificationOTPHash = undefined
+  user.emailVerificationOTPAttempts = 0
+  user.emailVerificationLastSent = undefined
+  user.emailVerificationExpires = undefined
+}
 
 const normalizeLabel = (value) => {
   if (typeof value !== 'string') return ''
@@ -173,9 +183,33 @@ exports.register = async (req, res) => {
       return res.status(400).json({ message: 'Password must be 8+ chars and include uppercase, lowercase, number, and symbol' })
     }
 
-    const existingUser = await User.findOne({ email: email.toLowerCase().trim() })
+    const emailVerificationEnabled = isEmailVerificationEnabled()
+    const existingUser = await User.findOne({ email: email.toLowerCase().trim() }).select('+password')
     if (existingUser) {
-      if (!existingUser.emailVerified) {
+      if (!emailVerificationEnabled && !existingUser.emailVerified) {
+        clearEmailVerificationFields(existingUser)
+        await existingUser.save()
+
+        const passwordMatches = existingUser.password
+          ? await bcrypt.compare(password, existingUser.password)
+          : false
+
+        if (passwordMatches) {
+          await existingUser.populate('college')
+          const token = generateToken(
+            { userId: existingUser._id, email: existingUser.email },
+            process.env.JWT_SECRET,
+            { expiresIn: jwtConfig.accessExpiresIn }
+          )
+          setAuthCookie(res, token)
+          return res.status(200).json({
+            message: 'Account already exists. Email verification is currently disabled, so you are signed in.',
+            user: toUserPayload(existingUser)
+          })
+        }
+      }
+
+      if (emailVerificationEnabled && !existingUser.emailVerified) {
         if (!canResendOtp(existingUser.emailVerificationLastSent)) {
           const waitSeconds = OTP_RESEND_COOLDOWN_SECONDS
           return res.status(429).json({ message: `Please wait ${waitSeconds}s before requesting another OTP.` })
@@ -261,9 +295,9 @@ exports.register = async (req, res) => {
       return res.status(400).json({ message: 'College selection is required' })
     }
 
-    const otp = generateOtp()
-    const expires = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000)
-    const verifyLink = buildVerifyLink(email.toLowerCase().trim())
+    const otp = emailVerificationEnabled ? generateOtp() : null
+    const expires = emailVerificationEnabled ? new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000) : undefined
+    const verifyLink = emailVerificationEnabled ? buildVerifyLink(email.toLowerCase().trim()) : null
 
     const normalizedSkills = Array.isArray(skills) ? skills : (skills ? [skills] : [])
 
@@ -285,15 +319,29 @@ exports.register = async (req, res) => {
         industryInterests,
         commitmentLevel
       }),
-      emailVerified: false,
+      emailVerified: !emailVerificationEnabled,
       emailVerificationOTP: undefined,
-      emailVerificationOTPHash: hashOtp(otp),
+      emailVerificationOTPHash: otp ? hashOtp(otp) : undefined,
       emailVerificationOTPAttempts: 0,
-      emailVerificationLastSent: new Date(),
+      emailVerificationLastSent: emailVerificationEnabled ? new Date() : undefined,
       emailVerificationExpires: expires
     })
 
     await user.save()
+
+    if (!emailVerificationEnabled) {
+      await user.populate('college')
+      const token = generateToken(
+        { userId: user._id, email: user.email },
+        process.env.JWT_SECRET,
+        { expiresIn: jwtConfig.accessExpiresIn }
+      )
+      setAuthCookie(res, token)
+      return res.status(201).json({
+        message: 'Registration successful.',
+        user: toUserPayload(user)
+      })
+    }
 
     try {
       await sendEmail({
@@ -659,6 +707,10 @@ exports.login = async (req, res) => {
     if (!user) {
       logSecurityEvent('auth_failure', req, { reason: 'user_not_found' })
       return res.status(401).json({ message: 'Invalid email or password' })
+    }
+
+    if (!user.emailVerified && !isEmailVerificationEnabled()) {
+      clearEmailVerificationFields(user)
     }
 
     if (!user.emailVerified) {
