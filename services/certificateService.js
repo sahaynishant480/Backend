@@ -24,9 +24,18 @@ const formatDate = (value) => {
 }
 
 const buildVerificationUrl = (certificateId) => {
-  const apiBase = process.env.PUBLIC_API_BASE || 'https://api.collab.qzz.io'
-  return `${apiBase.replace(/\/$/, '')}/api/public/certificates/${certificateId}`
+  const appBase = process.env.FRONTEND_URL || process.env.PUBLIC_APP_BASE || 'https://collab.qzz.io'
+  return `${appBase.replace(/\/$/, '')}/verify/${certificateId}`
 }
+
+const generateCertificateId = () =>
+  `COLLAB-${new Date().getFullYear()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`
+
+const createCertificateHash = ({ memberName, role, startupName, projectId, timestamp }) =>
+  crypto
+    .createHash('sha256')
+    .update([memberName, role, startupName, projectId, timestamp].map((value) => String(value || '')).join('|'))
+    .digest('hex')
 
 const generateCertificatePdf = async ({
   userName,
@@ -37,7 +46,10 @@ const generateCertificatePdf = async ({
   memberRole = 'Startup Team Member',
   contributionSummary = 'Contributed to startup execution inside Collab.',
   milestonesCompleted = 0,
-  stageAchieved = 'Validation'
+  stageAchieved = 'Validation',
+  projectStatus = 'In Progress',
+  verificationHash = '',
+  verificationUrl
 }) => {
   const uploadsRoot = path.join(__dirname, '..', 'uploads')
   const certificatesDir = path.join(uploadsRoot, 'certificates')
@@ -78,7 +90,7 @@ const generateCertificatePdf = async ({
     centerText(userName, nameY, nameSize, 'Times-Italic')
     centerText(`served as ${memberRole} for the startup`, workY, 13)
     centerText(`"${projectTitle}"`, pageHeight * 0.60, 16, 'Times-Italic')
-    centerText(`Stage achieved: ${stageAchieved} | Milestones completed: ${milestonesCompleted}`, pageHeight * 0.64, 12)
+    centerText(`Status: ${projectStatus} | Stage achieved: ${stageAchieved} | Milestones completed: ${milestonesCompleted}`, pageHeight * 0.64, 12)
     centerText(contributionSummary, pageHeight * 0.68, 11)
 
     if (collegeName) {
@@ -88,7 +100,8 @@ const generateCertificatePdf = async ({
     const footerY1 = pageHeight * 0.90
     const footerY2 = pageHeight * 0.93
     centerText(`Certificate ID: ${certificateId}`, footerY1, 9, 'Times-Roman', '#374151')
-    centerText(`Verify: ${buildVerificationUrl(certificateId)}`, footerY2, 9, 'Times-Roman', '#374151')
+    centerText(`SHA256: ${verificationHash || 'pending'}`, pageHeight * 0.875, 8, 'Times-Roman', '#374151')
+    centerText(`Verify: ${verificationUrl || buildVerificationUrl(certificateId)}`, footerY2, 9, 'Times-Roman', '#374151')
 
     doc.end()
     stream.on('finish', resolve)
@@ -98,7 +111,8 @@ const generateCertificatePdf = async ({
   return {
     filename,
     relativePath: `/uploads/certificates/${filename}`,
-    certificateId
+    certificateId,
+    filePath
   }
 }
 
@@ -107,21 +121,34 @@ const generateValidationCertificates = async ({ project, members, milestoneSumma
   const certificates = []
 
   for (const member of members) {
-    const certificateId = crypto.randomUUID()
+    const certificateId = generateCertificateId()
     const userId = member._id || member.id || member
     const userName = member.name || 'Team Member'
     const role = userId?.toString?.() === project.owner?.toString?.() ? 'Startup Lead' : 'Startup Team Member'
     const contributionSummary = contributionSummaries.get?.(userId?.toString?.()) || 'Contributed to startup execution, validation preparation, and incubation readiness work.'
+    const timestamp = issuedAt.toISOString()
+    const startupName = project.title
+    const verificationHash = createCertificateHash({
+      memberName: userName,
+      role,
+      startupName,
+      projectId: project._id,
+      timestamp
+    })
+    const verificationUrl = buildVerificationUrl(certificateId)
     const result = await generateCertificatePdf({
       userName: member.name || 'Team Member',
-      projectTitle: project.title,
+      projectTitle: startupName,
       collegeName: project.college?.name,
       issuedAt,
       certificateId,
       memberRole: role,
       contributionSummary,
       milestonesCompleted: milestoneSummary.completed || 0,
-      stageAchieved: project.lifecycleStage ? project.lifecycleStage.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Validation'
+      stageAchieved: project.lifecycleStage ? project.lifecycleStage.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Validation',
+      projectStatus: project.lifecycleStage === 'incubation_ready' ? 'Completed' : 'In Progress',
+      verificationHash,
+      verificationUrl
     })
     certificates.push({
       certificateId,
@@ -129,7 +156,13 @@ const generateValidationCertificates = async ({ project, members, milestoneSumma
       userName,
       url: result.relativePath,
       filename: result.filename,
-      issuedAt
+      issuedAt,
+      role,
+      startupName,
+      projectId: project._id,
+      timestamp,
+      verificationHash,
+      verificationUrl
     })
   }
 
@@ -143,10 +176,93 @@ const generateValidationCertificates = async ({ project, members, milestoneSumma
         college: project.college || null,
         projectTitle: project.title,
         userName: cert.userName,
+        role: cert.role,
         collegeName: project.college?.name || null,
         issuedAt: cert.issuedAt,
         url: cert.url,
-        filename: cert.filename
+        filename: cert.filename,
+        startupName: cert.startupName,
+        projectStatus: project.lifecycleStage === 'incubation_ready' ? 'Completed' : 'In Progress',
+        verificationHash: cert.verificationHash,
+        verificationUrl: cert.verificationUrl,
+        verificationTimestamp: cert.timestamp
+      }))
+    )
+  }
+
+  return certificates
+}
+
+const generateProjectCertificates = async ({ project, members, milestonesCompleted = 0 }) => {
+  const issuedAt = new Date()
+  const timestamp = issuedAt.toISOString()
+  const startupName = project.title
+  const projectId = project._id
+  const projectStatus = project.lifecycleStage === 'incubation_ready' ? 'Completed' : 'In Progress'
+  const certificates = []
+
+  for (const member of members) {
+    const userId = member._id || member.id || member
+    const memberName = member.name || 'Team Member'
+    const role = userId?.toString?.() === project.owner?._id?.toString?.() || userId?.toString?.() === project.owner?.toString?.()
+      ? 'Startup Lead'
+      : 'Startup Team Member'
+    const certificateId = generateCertificateId()
+    const verificationHash = createCertificateHash({ memberName, role, startupName, projectId, timestamp })
+    const verificationUrl = buildVerificationUrl(certificateId)
+
+    const result = await generateCertificatePdf({
+      userName: memberName,
+      projectTitle: startupName,
+      collegeName: project.college?.name,
+      issuedAt,
+      certificateId,
+      memberRole: role,
+      contributionSummary: 'Participated in the Collab pre-incubation startup execution process.',
+      milestonesCompleted,
+      stageAchieved: project.lifecycleStage ? project.lifecycleStage.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Startup Execution',
+      projectStatus,
+      verificationHash,
+      verificationUrl
+    })
+
+    const certificate = {
+      certificateId,
+      user: userId,
+      userName: memberName,
+      role,
+      startupName,
+      projectId,
+      timestamp,
+      verificationHash,
+      verificationUrl,
+      url: result.relativePath,
+      filename: result.filename,
+      filePath: result.filePath,
+      issuedAt
+    }
+    certificates.push(certificate)
+  }
+
+  if (certificates.length) {
+    await Certificate.insertMany(
+      certificates.map((cert) => ({
+        certificateId: cert.certificateId,
+        project: project._id,
+        user: cert.user,
+        college: project.college || null,
+        projectTitle: project.title,
+        userName: cert.userName,
+        role: cert.role,
+        collegeName: project.college?.name || null,
+        issuedAt: cert.issuedAt,
+        url: cert.url,
+        filename: cert.filename,
+        startupName: cert.startupName,
+        projectStatus,
+        verificationHash: cert.verificationHash,
+        verificationUrl: cert.verificationUrl,
+        verificationTimestamp: cert.timestamp
       }))
     )
   }
@@ -156,5 +272,7 @@ const generateValidationCertificates = async ({ project, members, milestoneSumma
 
 module.exports = {
   generateValidationCertificates,
-  buildVerificationUrl
+  generateProjectCertificates,
+  buildVerificationUrl,
+  createCertificateHash
 }

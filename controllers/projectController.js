@@ -9,7 +9,8 @@ const User = require('../models/User')
 const { createNotification } = require('./notificationController')
 const { applyUserStats, POINTS, computeBadges } = require('../utils/points')
 const { sendEmail } = require('../services/emailService')
-const { generateValidationCertificates, buildVerificationUrl } = require('../services/certificateService')
+const { generateValidationCertificates, generateProjectCertificates, buildVerificationUrl } = require('../services/certificateService')
+const { createStartupPackageZip, createZipBuffer } = require('../services/exportService')
 const { logSecurityEvent } = require('../middleware/securityLogger')
 const {
   normalizeLifecycleStage,
@@ -2518,6 +2519,109 @@ exports.getIncubationPacket = async (req, res) => {
   } catch (error) {
     console.error('Get incubation packet error:', error)
     return res.status(500).json({ message: 'Failed to generate incubation packet' })
+  }
+}
+
+exports.downloadStartupPackage = async (req, res) => {
+  try {
+    const { id } = req.params
+    const requesterId = req.user?.userId
+    const project = await Project.findById(id)
+      .populate('owner', 'name email')
+      .populate('teamMembers', 'name email')
+      .lean()
+
+    if (!project) {
+      return res.status(404).json({ message: 'Startup workspace not found' })
+    }
+
+    const requesterIdString = requesterId?.toString()
+    const isTeam = isViewerTeamMember(project, requesterIdString) || toId(project.owner?._id || project.owner) === requesterIdString
+    if (!isTeam) {
+      return res.status(403).json({ message: 'Only startup team members can download startup package' })
+    }
+
+    const [milestones, logs] = await Promise.all([
+      Milestone.find({ projectId: id }).populate('owner', 'name email').lean(),
+      ContributionLog.find({ projectId: id })
+        .populate('contributor', 'name email')
+        .populate('milestoneId', 'title status lifecycleStage')
+        .sort({ timestamp: -1 })
+        .limit(100)
+        .lean()
+    ])
+
+    const packet = buildIncubationPacket({ project, milestones, logs })
+    const zip = await createStartupPackageZip(packet)
+    const safeTitle = String(project.title || 'startup').replace(/[^a-z0-9-_]+/gi, '_').slice(0, 80)
+
+    res.setHeader('Content-Type', 'application/zip')
+    res.setHeader('Content-Disposition', `attachment; filename="${safeTitle}_startup_package.zip"`)
+    return res.send(zip)
+  } catch (error) {
+    console.error('Download startup package error:', error)
+    return res.status(500).json({ message: 'Failed to generate startup package' })
+  }
+}
+
+exports.downloadCertificatesZip = async (req, res) => {
+  try {
+    const { id } = req.params
+    const requesterId = req.user?.userId
+    const project = await Project.findById(id)
+      .populate('owner', 'name email')
+      .populate('teamMembers', 'name email')
+      .populate('college', 'name')
+
+    if (!project) {
+      return res.status(404).json({ message: 'Startup workspace not found' })
+    }
+
+    const requesterIdString = requesterId?.toString()
+    const isTeam = isViewerTeamMember(project, requesterIdString) || toId(project.owner?._id || project.owner) === requesterIdString
+    if (!isTeam) {
+      return res.status(403).json({ message: 'Only startup team members can download certificates' })
+    }
+
+    const members = [
+      project.owner,
+      ...(project.teamMembers || []).filter((member) => toId(member?._id || member) !== toId(project.owner?._id || project.owner))
+    ].filter(Boolean)
+    const milestonesCompleted = await Milestone.countDocuments({ projectId: id, status: 'completed' })
+    const certificates = await generateProjectCertificates({ project, members, milestonesCompleted })
+
+    project.validation = project.validation || {}
+    project.validation.certificates = [
+      ...(project.validation.certificates || []),
+      ...certificates.map((cert) => ({
+        certificateId: cert.certificateId,
+        user: cert.user,
+        url: cert.url,
+        filename: cert.filename,
+        userName: cert.userName,
+        role: cert.role,
+        startupName: cert.startupName,
+        verificationHash: cert.verificationHash,
+        verificationUrl: cert.verificationUrl,
+        verificationTimestamp: cert.timestamp,
+        issuedAt: cert.issuedAt
+      }))
+    ]
+    await project.save()
+
+    const entries = certificates.map((cert) => ({
+      name: `certificate_${String(cert.userName || 'team_member').replace(/[^a-z0-9-_]+/gi, '_')}.pdf`,
+      data: fs.readFileSync(cert.filePath)
+    }))
+    const zip = createZipBuffer(entries)
+    const safeTitle = String(project.title || 'startup').replace(/[^a-z0-9-_]+/gi, '_').slice(0, 80)
+
+    res.setHeader('Content-Type', 'application/zip')
+    res.setHeader('Content-Disposition', `attachment; filename="${safeTitle}_certificates.zip"`)
+    return res.send(zip)
+  } catch (error) {
+    console.error('Download certificates error:', error)
+    return res.status(500).json({ message: 'Failed to generate certificates' })
   }
 }
 

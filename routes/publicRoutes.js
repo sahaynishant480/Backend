@@ -6,5 +6,6 @@ const { emptyBody } = require('../validators')
 
 router.get('/stats', validate(emptyBody), getPublicStats)
 router.get('/certificates/:certificateId', validate(emptyBody), getCertificate)
+router.get('/verify/:certificateId', validate(emptyBody), getCertificate)
 
 module.exports = router

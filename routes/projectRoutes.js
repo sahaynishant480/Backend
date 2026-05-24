@@ -34,6 +34,8 @@ const {
   updateTeamCheckIn,
   getContinuationPlan,
   getIncubationPacket,
+  downloadStartupPackage,
+  downloadCertificatesZip,
   applyContinuationAction
 } = require('../controllers/projectController')
 const validate = require('../middleware/validate')
@@ -82,6 +84,8 @@ router.patch('/:id/team-checkin', validate(z.object({ params: z.object({ id: obj
 router.get('/:id/continuation', validate(z.object({ params: z.object({ id: objectId }) })), requireTeamMember, getContinuationPlan)
 router.post('/:id/continuation', validate(z.object({ params: z.object({ id: objectId }), body: checkIn.continuationBody })), requireTeamMember, applyContinuationAction)
 router.get('/:id/incubation-packet', validate(z.object({ params: z.object({ id: objectId }) })), requireTeamMember, getIncubationPacket)
+router.get('/:id/startup-package.zip', validate(z.object({ params: z.object({ id: objectId }) })), requireTeamMember, downloadStartupPackage)
+router.get('/:id/certificates.zip', validate(z.object({ params: z.object({ id: objectId }) })), requireTeamMember, downloadCertificatesZip)
 
 // Team Management
 router.post('/:id/add-member', validate(z.object({ params: z.object({ id: objectId }), body: project.addMemberBody })), requireProjectOwner, addTeamMember)

@@ -7,7 +7,13 @@ const CertificateSchema = new mongoose.Schema({
   college: { type: mongoose.Schema.Types.ObjectId, ref: 'College' },
   projectTitle: { type: String, required: true },
   userName: { type: String },
+  role: { type: String },
   collegeName: { type: String },
+  startupName: { type: String },
+  projectStatus: { type: String },
+  verificationHash: { type: String },
+  verificationUrl: { type: String },
+  verificationTimestamp: { type: String },
   issuedAt: { type: Date, default: Date.now },
   url: { type: String, required: true },
   filename: { type: String, required: true }

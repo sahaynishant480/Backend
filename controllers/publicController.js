@@ -1,6 +1,19 @@
 const User = require('../models/User')
 const Project = require('../models/Project')
 const Certificate = require('../models/Certificate')
+const { createCertificateHash } = require('../services/certificateService')
+
+const verifyCertificateRecord = (record = {}) => {
+  if (!record.verificationHash || !record.verificationTimestamp) return { valid: false, expectedHash: '' }
+  const expectedHash = createCertificateHash({
+    memberName: record.userName,
+    role: record.role,
+    startupName: record.startupName || record.projectTitle,
+    projectId: record.project?._id || record.project,
+    timestamp: record.verificationTimestamp
+  })
+  return { valid: expectedHash === record.verificationHash, expectedHash }
+}
 
 exports.getPublicStats = async (req, res) => {
   try {
@@ -40,11 +53,18 @@ exports.getCertificate = async (req, res) => {
     if (certificate) {
       const apiBase = (process.env.PUBLIC_API_BASE || 'https://api.collab.qzz.io').replace(/\/$/, '')
       const downloadUrl = `${apiBase}${certificate.url}`
+      const verification = verifyCertificateRecord(certificate)
       return res.json({
+        valid: verification.valid,
         certificate: {
           certificateId: certificate.certificateId,
           issuedAt: certificate.issuedAt,
           downloadUrl,
+          role: certificate.role,
+          startupName: certificate.startupName || certificate.projectTitle,
+          projectStatus: certificate.projectStatus,
+          verificationHash: certificate.verificationHash,
+          verificationUrl: certificate.verificationUrl,
           user: certificate.user ? {
             id: certificate.user._id || certificate.user,
             name: certificate.user.name || certificate.userName || 'Team Member'
@@ -81,12 +101,24 @@ exports.getCertificate = async (req, res) => {
 
     const apiBase = (process.env.PUBLIC_API_BASE || 'https://api.collab.qzz.io').replace(/\/$/, '')
     const downloadUrl = `${apiBase}${cert.url}`
+    const certRecord = cert.toObject?.() || cert
+    const verification = verifyCertificateRecord({
+      ...certRecord,
+      project: project._id,
+      projectTitle: project.title,
+      startupName: cert.startupName || project.title
+    })
 
     res.json({
+      valid: verification.valid,
       certificate: {
         certificateId: cert.certificateId,
         issuedAt: cert.issuedAt,
         downloadUrl,
+        role: cert.role,
+        startupName: cert.startupName || project.title,
+        verificationHash: cert.verificationHash,
+        verificationUrl: cert.verificationUrl,
         user: cert.user ? {
           id: cert.user._id || cert.user,
           name: cert.user.name || 'Team Member'

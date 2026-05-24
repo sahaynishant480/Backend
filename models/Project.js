@@ -163,6 +163,12 @@ const ProjectSchema = new mongoose.Schema({
       user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
       url: { type: String, required: true },
       filename: { type: String, required: true },
+      userName: { type: String },
+      role: { type: String },
+      startupName: { type: String },
+      verificationHash: { type: String },
+      verificationUrl: { type: String },
+      verificationTimestamp: { type: String },
       issuedAt: { type: Date, default: Date.now }
     }],
     completionAwarded: { type: Boolean, default: false },
