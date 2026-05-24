@@ -124,7 +124,9 @@ exports.updateProfile = async (req, res) => {
     if (yearOfStudy) user.yearOfStudy = yearOfStudy
     if (skills) user.skills = Array.isArray(skills) ? skills : [skills]
     if (primaryCategory) user.primaryCategory = primaryCategory
-    if (showContactToTeam !== undefined) user.showContactToTeam = showContactToTeam
+    if (showContactToTeam !== undefined) {
+      user.showContactToTeam = showContactToTeam === true || showContactToTeam === 'true'
+    }
     if (phone !== undefined) user.phone = phone ? phone.toString().trim() : ''
     if (!user.executionProfile) user.executionProfile = {}
 

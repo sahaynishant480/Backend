@@ -583,7 +583,11 @@ const sanitizeProjectForDiscover = (projectDoc, viewerId) => {
 
   const ownerId = toId(ownerRaw._id || ownerRaw)
   const isOwner = viewerId && ownerId === viewerId
-  const canShowContact = Boolean(ownerRaw.showContactToTeam) || isOwner
+  const isTeamMember = isViewerTeamMember(raw, viewerId)
+  const visibility = raw.visibility || project.visibility || 'private'
+  const isListedOnDiscover = visibility === 'global' || visibility === 'college'
+  const canShowContact =
+    Boolean(ownerRaw.showContactToTeam) || isOwner || isTeamMember || isListedOnDiscover
   const email = canShowContact && ownerRaw.email ? ownerRaw.email : undefined
   const phone = canShowContact && ownerRaw.phone ? ownerRaw.phone : undefined
 
