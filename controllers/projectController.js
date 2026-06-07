@@ -759,20 +759,7 @@ exports.getProjects = async (req, res) => {
     const parsedPage = Math.max(1, parseInt(page, 10) || 1)
     const filter = {}
     const viewerId = req.user?.userId ? req.user.userId.toString() : ''
-    const viewer = await User.findById(req.user.userId).select('college college_id')
-    const viewerCollege = (viewer?.college || viewer?.college_id) ? (viewer.college || viewer.college_id).toString() : null
-
-    const visibilityFilter = [{ visibility: 'global' }]
-    if (viewerCollege) {
-      visibilityFilter.push({ visibility: 'college', college: viewerCollege })
-    }
-    if (viewerId) {
-      visibilityFilter.push({
-        visibility: 'private',
-        $or: [{ owner: viewerId }, { teamMembers: viewerId }]
-      })
-    }
-    filter.$or = visibilityFilter
+    filter.lifecycleStage = { $ne: 'archived' }
 
     const lifecycleFilter = lifecycleStage || status
     if (typeof lifecycleFilter === 'string' && lifecycleFilter && lifecycleFilter !== 'all') {
