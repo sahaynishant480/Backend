@@ -9,7 +9,7 @@ database operations in the Collab.
                             TABLE OF CONTENTS
 ================================================================================
 
-1. DATABASE CONNECTION & SETUP
+1. DATABASE COLLABORATOR & SETUP
 2. USER MODEL STRUCTURE
 3. MANAGING USER LOGIN STATUS
 4. ADDING NEW USERS
@@ -21,12 +21,12 @@ database operations in the Collab.
 10. TROUBLESHOOTING
 
 ================================================================================
-1. DATABASE CONNECTION & SETUP
+1. DATABASE COLLABORATOR & SETUP
 ================================================================================
 
-Database Connection Details:
+Database Collaborator Details:
 - Type: MongoDB
-- Connection URI: Set in .env file as MONGO_URI
+- Collaborator URI: Set in .env file as MONGO_URI
 - Local Default: mongodb://127.0.0.1:27017/student-startup-db
 
 To connect to database:
@@ -64,10 +64,10 @@ User Schema Fields:
 }
 
 Related Collections:
-- Projects: Owned by users (owner field)
+- Ventures: Owned by users (owner field)
 - JoinRequests: Sent by/to users
 - Feedback: Created by users
-- Tasks: Assigned to users
+- Milestones: Assigned to users
 
 ================================================================================
 3. MANAGING USER LOGIN STATUS
@@ -199,7 +199,7 @@ Create script: remove-user.js
 ```
 const mongoose = require('mongoose')
 const User = require('./models/User')
-const Project = require('./models/Project')
+const Venture = require('./models/Venture')
 
 async function removeUser(email) {
   await mongoose.connect(process.env.MONGO_URI)
@@ -211,17 +211,17 @@ async function removeUser(email) {
     return
   }
   
-  // Handle user's projects (transfer or delete)
-  await Project.deleteMany({owner: user._id})
+  // Handle user's ventures (transfer or delete)
+  await Venture.deleteMany({owner: user._id})
   
   // Remove from team memberships
-  await Project.updateMany(
+  await Venture.updateMany(
     {teamMembers: user._id},
     {$pull: {teamMembers: user._id}}
   )
   
   // Remove from interested users
-  await Project.updateMany(
+  await Venture.updateMany(
     {interestedUsers: user._id},
     {$pull: {interestedUsers: user._id}}
   )
@@ -247,7 +247,7 @@ A) User Activity Dashboard:
 ```
 const mongoose = require('mongoose')
 const User = require('./models/User')
-const Project = require('./models/Project')
+const Venture = require('./models/Venture')
 
 async function getActivityReport() {
   await mongoose.connect(process.env.MONGO_URI)
@@ -257,14 +257,14 @@ async function getActivityReport() {
   const activeUsers = await User.countDocuments({
     updatedAt: {$gte: new Date(Date.now() - 7*24*60*60*1000)}
   })
-  const totalProjects = await Project.countDocuments()
+  const totalProjects = await Venture.countDocuments()
   
   console.log('Activity Report')
   console.log('================')
   console.log(`Total Users: ${totalUsers}`)
   console.log(`Verified Users: ${verifiedUsers}`)
   console.log(`Active Users (7 days): ${activeUsers}`)
-  console.log(`Total Projects: ${totalProjects}`)
+  console.log(`Total Ventures: ${totalProjects}`)
   
   await mongoose.disconnect()
 }
@@ -308,7 +308,7 @@ db.users.find({email: /@gmail\.com$/})
 
 # Count users by verification status
 db.users.aggregate([
-  {$group: {_id: "$emailVerified", count: {$sum: 1}}}
+  {$startup team: {_id: "$emailVerified", count: {$sum: 1}}}
 ])
 
 # Find inactive users (no login for 30 days)
@@ -401,9 +401,9 @@ Common Issues & Solutions:
    - Verify password hash matches
    - Check JWT token configuration
 
-2) Database Connection Issues:
+2) Database Collaborator Issues:
    - Verify MongoDB is running
-   - Check connection URI in .env
+   - Check collaborator URI in .env
    - Ensure network accessibility
 
 3) Duplicate Email Error:

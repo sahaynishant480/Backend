@@ -183,6 +183,7 @@ const getTransporter = async () => {
         user: EMAIL_USER,
         pass: EMAIL_PASS
       },
+      family: 4,
       ...timeoutOptions
     })
   }
@@ -198,6 +199,7 @@ const getTransporter = async () => {
       user: EMAIL_USER,
       pass: EMAIL_PASS
     },
+    family: 4,
     ...timeoutOptions
   })
 }
