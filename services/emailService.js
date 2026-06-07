@@ -157,6 +157,33 @@ const sendViaSendGrid = async ({ to, subject, text, html, attachments }) => {
   }
 }
 
+const sendViaBrevo = async ({ to, subject, text, html }) => {
+  const apiKey = process.env.BREVO_API_KEY
+  if (!apiKey) throw new Error('BREVO_API_KEY must be set when EMAIL_PROVIDER=brevo')
+  const fromAddress = process.env.EMAIL_FROM
+  if (!fromAddress) throw new Error('EMAIL_FROM must be set for Brevo')
+  const fetchFn = getFetch()
+  const response = await fetchFn('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'api-key': apiKey,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      sender: { email: fromAddress, name: 'Collab' },
+      to: [{ email: to }],
+      subject,
+      textContent: text,
+      htmlContent: html
+    })
+  })
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Brevo error ${response.status}: ${errorText}`)
+  }
+  return { success: true, provider: 'brevo' }
+}
+
 const getTransporter = async () => {
   const {
     EMAIL_SERVICE,
@@ -219,6 +246,9 @@ const mapNodemailerAttachments = (attachments = []) => {
 exports.sendEmail = async ({ to, subject, text, html, attachments }) => {
   try {
     const provider = (process.env.EMAIL_PROVIDER || '').toLowerCase().trim()
+    if (provider === 'brevo') {
+      return await sendViaBrevo({ to, subject, text, html, attachments })
+    }
     if (provider === 'resend') {
       return await sendViaResend({ to, subject, text, html, attachments })
     }
