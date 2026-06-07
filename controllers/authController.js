@@ -1033,6 +1033,7 @@ exports.resetPassword = async (req, res) => {
     }
 
     const user = await User.findOne({ email: email.toLowerCase().trim() })
+      .select('+resetPasswordOTP +resetPasswordOTPHash +resetPasswordOTPAttempts')
 
     if (!user || !user.resetPasswordExpires) {
       return res.status(400).json({ message: 'Invalid OTP or email' })
