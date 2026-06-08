@@ -147,6 +147,11 @@ const feedRoutes = require('./routes/feedRoutes')
 app.use('/feed', protect, feedRoutes)
 app.use('/api/feed', protect, feedRoutes)
 
+// Opportunity routes
+const opportunityRoutes = require('./routes/opportunityRoutes')
+app.use('/opportunities', opportunityRoutes)
+app.use('/api/opportunities', opportunityRoutes)
+
 app.use(notFound)
 app.use(errorHandler)
 
