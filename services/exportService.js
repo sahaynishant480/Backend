@@ -1,4 +1,9 @@
+const fs = require('fs')
+const path = require('path')
 const PDFDocument = require('pdfkit')
+
+const TEMPLATE_DIR = path.join(__dirname, '..', 'assets', 'templates')
+const INCLUDE_LEGACY_PACKAGE_DOCUMENTS = false
 
 const crcTable = new Uint32Array(256).map((_, index) => {
   let c = index
@@ -83,13 +88,20 @@ const textValue = (value) => {
   return String(value || 'Not provided')
 }
 
-const createPdfBuffer = (title, sections = []) => new Promise((resolve, reject) => {
+const createPdfBuffer = (title, sections = [], templateFile = '') => new Promise((resolve, reject) => {
   const doc = new PDFDocument({ size: 'A4', margin: 48 })
   const chunks = []
 
   doc.on('data', (chunk) => chunks.push(chunk))
   doc.on('end', () => resolve(Buffer.concat(chunks)))
   doc.on('error', reject)
+
+  if (templateFile) {
+    const templatePath = path.join(TEMPLATE_DIR, templateFile)
+    if (fs.existsSync(templatePath)) {
+      doc.image(templatePath, 0, 0, { fit: [doc.page.width, doc.page.height] })
+    }
+  }
 
   doc.fontSize(20).fillColor('#111827').text(title, { underline: false })
   doc.moveDown(0.75)
@@ -147,9 +159,9 @@ const getTeamMembers = (packet = {}) => {
   })
 }
 
-const generateTemplatePdf = (title, sections = []) => createPdfBuffer(title, sections)
+const generateTemplatePdf = (title, templateFile, sections = []) => createPdfBuffer(title, sections, templateFile)
 
-const generateStartupIdentityCardPdf = (packet = {}) => generateTemplatePdf('Startup Identity Card', [
+const generateStartupIdentityCardPdf = (packet = {}) => generateTemplatePdf('Startup Identity Card', 'startup_identity_card.png', [
   { heading: 'Startup Name', body: packet.summary?.startupName },
   { heading: 'Tagline', body: packet.summary?.tagline },
   { heading: 'Category', body: packet.summary?.category },
@@ -161,12 +173,12 @@ const generateStartupIdentityCardPdf = (packet = {}) => generateTemplatePdf('Sta
   { heading: 'Problem Statement', body: packet.summary?.problemStatement }
 ])
 
-const generateProblemStatementPdf = (packet = {}) => generateTemplatePdf('Problem Statement Brief', [
+const generateProblemStatementPdf = (packet = {}) => generateTemplatePdf('Problem Statement Brief', 'problem_statement.png', [
   { heading: 'Startup Name', body: packet.summary?.startupName },
   { heading: 'Problem Statement', body: packet.summary?.problemStatement }
 ])
 
-const generateTeamRosterPdf = (packet = {}) => generateTemplatePdf('Team Roster', getTeamMembers(packet).map((member, index) => ({
+const generateTeamRosterPdf = (packet = {}) => generateTemplatePdf('Team Roster', 'team_roster.png', getTeamMembers(packet).map((member, index) => ({
   heading: `${index + 1}. ${member.name || 'Team Member'}`,
   body: {
     email: member.email || 'Not provided',
@@ -174,7 +186,7 @@ const generateTeamRosterPdf = (packet = {}) => generateTemplatePdf('Team Roster'
   }
 })))
 
-const generateIncubationApplicationPdf = (packet = {}) => generateTemplatePdf('Incubation Application', [
+const generateIncubationApplicationPdf = (packet = {}) => generateTemplatePdf('Incubation Application', 'incubation_application_cover.png', [
   { heading: 'Startup Name', body: packet.summary?.startupName },
   { heading: 'Tagline', body: packet.summary?.tagline },
   { heading: 'Category', body: packet.summary?.category },
@@ -206,6 +218,7 @@ const createStartupPackageZip = async (packet = {}) => {
       name: 'documents/Incubation_Application.pdf',
       data: await generateIncubationApplicationPdf(packet)
     },
+    ...(INCLUDE_LEGACY_PACKAGE_DOCUMENTS ? [
     { name: 'documents/pitch_deck.pptx', data: createPitchDeckBuffer(packet) },
     {
       name: 'documents/validation_report.pdf',
@@ -251,6 +264,7 @@ const createStartupPackageZip = async (packet = {}) => {
         { heading: 'Demo video links', body: packet.incubationAssets?.demoVideoLinks }
       ])
     }
+    ] : [])
   ]
 
   return createZipBuffer(entries)
