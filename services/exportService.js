@@ -139,6 +139,9 @@ const field = (doc, value, x, y, w, opts = {}) => {
   doc.font(opts.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(opts.size || 12).fillColor(opts.color || '#111827')
   doc.text(clean(value), x, y, { width: w, height: opts.h || 42, align: opts.align || 'left', ellipsis: true, lineGap: opts.lineGap || 2 })
 }
+const clearBox = (doc, x, y, w, h) => {
+  doc.save().rect(x, y, w, h).fill('#ffffff').restore()
+}
 
 const escapeXml = (value) => String(value || '')
   .replace(/&/g, '&amp;')
@@ -185,16 +188,17 @@ const generateStartupIdentityCardPdf = (packet = {}) => createDesignedPdf('start
   const members = getTeamMembers(packet)
   const completed = packet.readinessSignals?.completedMilestones ?? ''
   const total = packet.readinessSignals?.totalMilestones ?? ''
-  field(doc, packet.summary?.startupName, 120, 140, 355, { size: 28, align: 'center', color: '#9ca3af' })
-  field(doc, `"${packet.summary?.tagline || packet.summary?.elevatorPitch || ''}"`, 70, 190, 455, { size: 17, align: 'center' })
-  field(doc, `— ${packet.summary?.category || ''} —`, 58, 318, 230, { size: 16, bold: true, align: 'center' })
-  ;(packet.summary?.descriptorWords || []).slice(0, 3).forEach((word, i) => field(doc, word, 63 + i * 82, 413, 66, { size: 9, align: 'center', color: '#6b7280' }))
-  field(doc, packet.readinessScore ? String(packet.readinessScore) : '', 385, 360, 80, { size: 26, bold: true, align: 'center', color: '#000' })
-  field(doc, `— ${members.length} Members`, 58, 503, 230, { size: 17, bold: true })
-  field(doc, packet.stage?.label, 333, 500, 190, { size: 16, bold: true })
-  field(doc, dateText(packet.generatedAt), 50, 595, 230, { size: 18, bold: true })
-  field(doc, `${completed}/${total} completed`, 332, 595, 190, { size: 16, bold: true })
-  field(doc, packet.summary?.elevatorPitch || packet.summary?.whyThisMatters, 64, 727, 470, { size: 10, h: 80, lineGap: 5, color: '#4b5563' })
+  field(doc, packet.summary?.startupName, 120, 150, 355, { size: 24, align: 'center', color: '#9ca3af', h: 36 })
+  field(doc, `"${packet.summary?.tagline || packet.summary?.elevatorPitch || ''}"`, 70, 198, 455, { size: 15, align: 'center', h: 32 })
+  field(doc, `— ${packet.summary?.category || ''} —`, 58, 328, 230, { size: 15, bold: true, align: 'center', h: 28 })
+  ;(packet.summary?.descriptorWords || []).slice(0, 3).forEach((word, i) => field(doc, word, 63 + i * 82, 422, 66, { size: 8, align: 'center', color: '#6b7280', h: 14 }))
+  field(doc, packet.readinessScore ? String(packet.readinessScore) : '', 385, 372, 80, { size: 24, bold: true, align: 'center', color: '#000', h: 28 })
+  field(doc, `— ${members.length} Members`, 58, 512, 230, { size: 16, bold: true, h: 28 })
+  field(doc, packet.stage?.label, 333, 512, 190, { size: 15, bold: true, h: 30 })
+  field(doc, dateText(packet.generatedAt), 50, 604, 230, { size: 17, bold: true, h: 28 })
+  field(doc, `${completed}/${total} completed`, 332, 604, 190, { size: 15, bold: true, h: 28 })
+  clearBox(doc, 60, 704, 475, 80)
+  field(doc, packet.summary?.elevatorPitch || packet.summary?.whyThisMatters, 64, 710, 470, { size: 9, h: 66, lineGap: 3, color: '#4b5563' })
 })
 
 const generateProblemStatementPdf = (packet = {}) => createDesignedPdf('problem_statement.png', (doc) => {
