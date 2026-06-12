@@ -118,6 +118,28 @@ const createPdfBuffer = (title, sections = [], templateFile = '') => new Promise
   doc.end()
 })
 
+const createDesignedPdf = (templateFile, draw) => new Promise((resolve, reject) => {
+  const doc = new PDFDocument({ size: 'A4', margin: 0 })
+  const chunks = []
+  doc.on('data', (chunk) => chunks.push(chunk))
+  doc.on('end', () => resolve(Buffer.concat(chunks)))
+  doc.on('error', reject)
+  const templatePath = path.join(TEMPLATE_DIR, templateFile)
+  if (fs.existsSync(templatePath)) doc.image(templatePath, 0, 0, { fit: [595, 842] })
+  draw(doc)
+  doc.end()
+})
+
+const clean = (value) => String(value || '').trim()
+const dateText = (value) => {
+  const date = value ? new Date(value) : new Date()
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString('en-IN')
+}
+const field = (doc, value, x, y, w, opts = {}) => {
+  doc.font(opts.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(opts.size || 12).fillColor(opts.color || '#111827')
+  doc.text(clean(value), x, y, { width: w, height: opts.h || 42, align: opts.align || 'left', ellipsis: true, lineGap: opts.lineGap || 2 })
+}
+
 const escapeXml = (value) => String(value || '')
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
@@ -159,42 +181,60 @@ const getTeamMembers = (packet = {}) => {
   })
 }
 
-const generateTemplatePdf = (title, templateFile, sections = []) => createPdfBuffer(title, sections, templateFile)
+const generateStartupIdentityCardPdf = (packet = {}) => createDesignedPdf('startup_identity_card.png', (doc) => {
+  const members = getTeamMembers(packet)
+  const completed = packet.readinessSignals?.completedMilestones ?? ''
+  const total = packet.readinessSignals?.totalMilestones ?? ''
+  field(doc, packet.summary?.startupName, 120, 140, 355, { size: 28, align: 'center', color: '#9ca3af' })
+  field(doc, `"${packet.summary?.tagline || packet.summary?.elevatorPitch || ''}"`, 70, 190, 455, { size: 17, align: 'center' })
+  field(doc, `— ${packet.summary?.category || ''} —`, 58, 318, 230, { size: 16, bold: true, align: 'center' })
+  ;(packet.summary?.descriptorWords || []).slice(0, 3).forEach((word, i) => field(doc, word, 63 + i * 82, 413, 66, { size: 9, align: 'center', color: '#6b7280' }))
+  field(doc, packet.readinessScore ? String(packet.readinessScore) : '', 385, 360, 80, { size: 26, bold: true, align: 'center', color: '#000' })
+  field(doc, `— ${members.length} Members`, 58, 503, 230, { size: 17, bold: true })
+  field(doc, packet.stage?.label, 333, 500, 190, { size: 16, bold: true })
+  field(doc, dateText(packet.generatedAt), 50, 595, 230, { size: 18, bold: true })
+  field(doc, `${completed}/${total} completed`, 332, 595, 190, { size: 16, bold: true })
+  field(doc, packet.summary?.elevatorPitch || packet.summary?.whyThisMatters, 64, 727, 470, { size: 10, h: 80, lineGap: 5, color: '#4b5563' })
+})
 
-const generateStartupIdentityCardPdf = (packet = {}) => generateTemplatePdf('Startup Identity Card', 'startup_identity_card.png', [
-  { heading: 'Startup Name', body: packet.summary?.startupName },
-  { heading: 'Tagline', body: packet.summary?.tagline },
-  { heading: 'Category', body: packet.summary?.category },
-  { heading: 'Readiness Score', body: `${packet.readinessScore || 0}%` },
-  { heading: 'Stage', body: packet.stage?.label },
-  { heading: 'Founder', body: packet.summary?.founderName || packet.teamDetails?.founder?.name },
-  { heading: 'Team Member Count', body: getTeamMembers(packet).length },
-  { heading: 'Elevator Pitch', body: packet.summary?.elevatorPitch || packet.summary?.whyThisMatters },
-  { heading: 'Problem Statement', body: packet.summary?.problemStatement }
-])
+const generateProblemStatementPdf = (packet = {}) => createDesignedPdf('problem_statement.png', (doc) => {
+  field(doc, packet.summary?.startupName, 338, 75, 190, { size: 12, align: 'center', color: '#4b5563' })
+  const rows = [
+    ['What problem are you solving?', packet.summary?.problemStatement],
+    ['Who faces this problem?', packet.summary?.targetUsers],
+    ['Why does this matter?', packet.summary?.whyThisMatters],
+    ['What makes your idea different?', packet.summary?.elevatorPitch],
+    ['What changed after feedback?', packet.validationReport?.questions?.find((q) => /changed/i.test(q.question))?.answer]
+  ]
+  let y = 150
+  rows.forEach(([q, a], i) => {
+    field(doc, `${i + 1}. ${q}`, 52, y, 490, { size: 12, bold: true })
+    field(doc, a || '', 65, y + 25, 465, { size: 10, h: 62, lineGap: 3, color: '#374151' })
+    y += 120
+  })
+})
 
-const generateProblemStatementPdf = (packet = {}) => generateTemplatePdf('Problem Statement Brief', 'problem_statement.png', [
-  { heading: 'Startup Name', body: packet.summary?.startupName },
-  { heading: 'Problem Statement', body: packet.summary?.problemStatement }
-])
+const generateTeamRosterPdf = (packet = {}) => createDesignedPdf('team_roster.png', (doc) => {
+  field(doc, packet.summary?.startupName, 338, 78, 190, { size: 12, align: 'center', color: '#4b5563' })
+  getTeamMembers(packet).slice(0, 12).forEach((member, i) => {
+    const y = 222 + i * 30
+    field(doc, String(i + 1), 48, y, 35, { size: 10 })
+    field(doc, member.name, 92, y, 180, { size: 10 })
+    field(doc, member.role || 'Team Member', 290, y, 95, { size: 10 })
+    field(doc, member.email, 397, y, 145, { size: 9 })
+  })
+})
 
-const generateTeamRosterPdf = (packet = {}) => generateTemplatePdf('Team Roster', 'team_roster.png', getTeamMembers(packet).map((member, index) => ({
-  heading: `${index + 1}. ${member.name || 'Team Member'}`,
-  body: {
-    email: member.email || 'Not provided',
-    role: member.role || 'Team Member'
-  }
-})))
-
-const generateIncubationApplicationPdf = (packet = {}) => generateTemplatePdf('Incubation Application', 'incubation_application_cover.png', [
-  { heading: 'Startup Name', body: packet.summary?.startupName },
-  { heading: 'Tagline', body: packet.summary?.tagline },
-  { heading: 'Category', body: packet.summary?.category },
-  { heading: 'Stage', body: packet.stage?.label },
-  { heading: 'Readiness Score', body: `${packet.readinessScore || 0}%` },
-  { heading: 'Founder Name', body: packet.summary?.founderName || packet.teamDetails?.founder?.name },
-  { heading: 'Date Generated', body: packet.generatedAt }
-])
+const generateIncubationApplicationPdf = (packet = {}) => createDesignedPdf('incubation_application_cover.png', (doc) => {
+  field(doc, packet.summary?.startupName, 40, 160, 515, { size: 28, align: 'center', color: '#9ca3af' })
+  field(doc, `"${packet.summary?.tagline || packet.summary?.elevatorPitch || ''}"`, 55, 218, 485, { size: 17, align: 'center' })
+  field(doc, packet.summary?.category, 72, 355, 90, { size: 10, align: 'center' })
+  field(doc, packet.stage?.label, 205, 355, 100, { size: 10, align: 'center' })
+  field(doc, `${packet.readinessScore || ''}/100`, 338, 360, 95, { size: 10, align: 'center' })
+  field(doc, dateText(packet.generatedAt), 461, 360, 78, { size: 10, align: 'center' })
+  field(doc, packet.summary?.founderName || packet.teamDetails?.founder?.name, 58, 470, 225, { size: 18, bold: true })
+  field(doc, packet.teamDetails?.founder?.role || 'Startup Lead', 58, 505, 225, { size: 10, color: '#6b7280' })
+})
 
 const createStartupPackageZip = async (packet = {}) => {
   const validationAnswers = packet.validationReport?.questions
