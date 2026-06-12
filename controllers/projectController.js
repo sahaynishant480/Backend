@@ -354,6 +354,11 @@ const getStartupTargetUsers = (project = {}) => (
 
 const buildIncubationPacket = ({ project, milestones = [], logs = [] }) => {
   const lifecycleStage = getProjectLifecycle(project)
+  const pipeline = project.pipeline || {}
+  const foundation = pipeline.foundation || {}
+  const purpose = pipeline.purpose || {}
+  const mvp = pipeline.mvp || {}
+  const incubation = pipeline.incubation || {}
   const validationWorkspace = project.validation?.workspace || {}
   const completedMilestones = milestones.filter((milestone) => milestone.status === 'completed')
   const openBlockers = getOpenBlockerCount(milestones)
@@ -390,24 +395,45 @@ const buildIncubationPacket = ({ project, milestones = [], logs = [] }) => {
     summary: {
       startupName: project.title,
       category: project.category,
-      whyThisMatters: project.shortPitch,
+      tagline: foundation.tagline || project.shortPitch || '',
+      whyThisMatters: purpose.impactStatement || project.shortPitch,
       problemStatement: getStartupProblem(project),
       targetUsers: getStartupTargetUsers(project),
       currentStage: getLifecycleLabel(lifecycleStage),
-      nextStage: getNextLifecycleStage(lifecycleStage) ? getLifecycleLabel(getNextLifecycleStage(lifecycleStage)) : 'Ready to submit'
+      nextStage: getNextLifecycleStage(lifecycleStage)
+        ? getLifecycleLabel(getNextLifecycleStage(lifecycleStage))
+        : 'Ready to submit',
+
+      elevatorPitch: project.shortPitch || '',
+      descriptorWords: foundation.descriptorWords || project.tags || [],
+      founderInspiration: purpose.founderInspiration || '',
+      founderName: project.owner?.name || '',
+      founderEmail: project.owner?.email || ''
     },
     planning: {
-      goals: project.executionPlan || '',
+      goals: project.executionPlan || mvp.roadmap || '',
       featureScope: project.techProduct?.features || project.designCreative?.deliverables || [],
       roles: project.rolesNeeded || [],
-      skills: project.skillsRequired || []
+      skills: project.skillsRequired || [],
+      readinessNotes: pipeline.readiness?.notes || ''
     },
-    teamDetails: members.map((member) => ({
-      id: toId(member?._id || member),
-      name: member?.name || 'Team Member',
-      email: member?.email || '',
-      role: toId(member?._id || member) === toId(project.owner) ? 'Startup Lead' : 'Team Member'
-    })),
+    teamDetails: {
+      founder: {
+        name: project.owner?.name || '',
+        email: project.owner?.email || '',
+        role: 'Startup Lead'
+      },
+
+      members: members.map((member) => ({
+        id: toId(member?._id || member),
+        name: member?.name || 'Team Member',
+        email: member?.email || '',
+        role:
+          toId(member?._id || member) === toId(project.owner)
+            ? 'Startup Lead'
+            : 'Team Member'
+      }))
+    },
     milestoneHistory: milestones.map((milestone) => ({
       title: milestone.title,
       status: milestone.status,
@@ -434,8 +460,11 @@ const buildIncubationPacket = ({ project, milestones = [], logs = [] }) => {
       evidence
     },
     prototypeShowcase: {
-      demoLink: project.validation?.demoLink || '',
+      demoLink: project.validation?.demoLink || mvp.demoLinks?.[0] || '',
       demoNotes: project.validation?.demoNotes || '',
+      figmaLinks: mvp.figmaLinks || [],
+      githubLinks: mvp.githubLinks || [],
+      demoLinks: mvp.demoLinks || [],
       files: files.map((file) => ({
         id: toId(file._id || file.filename),
         name: file.originalName,
@@ -459,6 +488,12 @@ const buildIncubationPacket = ({ project, milestones = [], logs = [] }) => {
       'Roadmap after incubation support',
       'Ask from the incubation center'
     ],
+    incubationAssets: {
+      executiveSummary: incubation.executiveSummary || '',
+      startupOverview: incubation.startupOverview || '',
+      pitchDeckLinks: incubation.pitchDeckLinks || [],
+      demoVideoLinks: incubation.demoVideoLinks || []
+    },
     checklist: packetItems,
     readinessSignals: {
       completedMilestones: completedMilestones.length,
@@ -1114,7 +1149,7 @@ exports.updateProjectDetails = async (req, res) => {
   try {
     const { id } = req.params
     const requesterId = req.user?.userId
-    const { title, shortPitch, description, tags, executionPlan } = req.body
+    const { title, shortPitch, description, tags, executionPlan, pipeline } = req.body
 
     if (!requesterId) {
       return res.status(401).json({ message: 'Unauthorized' })
@@ -1163,6 +1198,30 @@ exports.updateProjectDetails = async (req, res) => {
         .map((tag) => (typeof tag === 'string' ? tag.trim() : ''))
         .filter(Boolean)
       project.tags = normalizedTags
+    }
+    if (typeof pipeline === 'object' && pipeline !== null) {
+      project.pipeline = {
+        foundation: {
+          ...(project.pipeline?.foundation || {}),
+          ...(pipeline.foundation || {})
+        },
+        purpose: {
+          ...(project.pipeline?.purpose || {}),
+          ...(pipeline.purpose || {})
+        },
+        readiness: {
+          ...(project.pipeline?.readiness || {}),
+          ...(pipeline.readiness || {})
+        },
+        mvp: {
+          ...(project.pipeline?.mvp || {}),
+          ...(pipeline.mvp || {})
+        },
+        incubation: {
+          ...(project.pipeline?.incubation || {}),
+          ...(pipeline.incubation || {})
+        }
+      }
     }
 
     const updatedFingerprint = createIdeaFingerprint({

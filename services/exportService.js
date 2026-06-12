@@ -133,6 +133,56 @@ const createPitchDeckBuffer = (packet = {}) => {
     ...slides.map(([title, body], i) => ({ name: `ppt/slides/slide${i + 1}.xml`, data: slideXml(title, body) }))
   ])
 }
+const getTeamMembers = (packet = {}) => {
+  const members = Array.isArray(packet.teamDetails) ? packet.teamDetails : [
+    packet.teamDetails?.founder,
+    ...(packet.teamDetails?.members || [])
+  ].filter(Boolean)
+  const seen = new Set()
+  return members.filter((member) => {
+    const key = String(member.id || member._id || member.email || member.name || '').toLowerCase()
+    if (!key || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+const generateTemplatePdf = (title, sections = []) => createPdfBuffer(title, sections)
+
+const generateStartupIdentityCardPdf = (packet = {}) => generateTemplatePdf('Startup Identity Card', [
+  { heading: 'Startup Name', body: packet.summary?.startupName },
+  { heading: 'Tagline', body: packet.summary?.tagline },
+  { heading: 'Category', body: packet.summary?.category },
+  { heading: 'Readiness Score', body: `${packet.readinessScore || 0}%` },
+  { heading: 'Stage', body: packet.stage?.label },
+  { heading: 'Founder', body: packet.summary?.founderName || packet.teamDetails?.founder?.name },
+  { heading: 'Team Member Count', body: getTeamMembers(packet).length },
+  { heading: 'Elevator Pitch', body: packet.summary?.elevatorPitch || packet.summary?.whyThisMatters },
+  { heading: 'Problem Statement', body: packet.summary?.problemStatement }
+])
+
+const generateProblemStatementPdf = (packet = {}) => generateTemplatePdf('Problem Statement Brief', [
+  { heading: 'Startup Name', body: packet.summary?.startupName },
+  { heading: 'Problem Statement', body: packet.summary?.problemStatement }
+])
+
+const generateTeamRosterPdf = (packet = {}) => generateTemplatePdf('Team Roster', getTeamMembers(packet).map((member, index) => ({
+  heading: `${index + 1}. ${member.name || 'Team Member'}`,
+  body: {
+    email: member.email || 'Not provided',
+    role: member.role || 'Team Member'
+  }
+})))
+
+const generateIncubationApplicationPdf = (packet = {}) => generateTemplatePdf('Incubation Application', [
+  { heading: 'Startup Name', body: packet.summary?.startupName },
+  { heading: 'Tagline', body: packet.summary?.tagline },
+  { heading: 'Category', body: packet.summary?.category },
+  { heading: 'Stage', body: packet.stage?.label },
+  { heading: 'Readiness Score', body: `${packet.readinessScore || 0}%` },
+  { heading: 'Founder Name', body: packet.summary?.founderName || packet.teamDetails?.founder?.name },
+  { heading: 'Date Generated', body: packet.generatedAt }
+])
 
 const createStartupPackageZip = async (packet = {}) => {
   const validationAnswers = packet.validationReport?.questions
@@ -141,13 +191,20 @@ const createStartupPackageZip = async (packet = {}) => {
 
   const entries = [
     {
-      name: 'documents/one_pager.pdf',
-      data: await createPdfBuffer('One-Pager', [
-        { heading: 'Startup', body: packet.summary?.startupName },
-        { heading: 'Problem', body: packet.summary?.problemStatement },
-        { heading: 'Target users', body: packet.summary?.targetUsers },
-        { heading: 'Why this matters', body: packet.summary?.whyThisMatters }
-      ])
+      name: 'documents/Startup_Identity_Card.pdf',
+      data: await generateStartupIdentityCardPdf(packet)
+    },
+    {
+      name: 'documents/Problem_Statement_Brief.pdf',
+      data: await generateProblemStatementPdf(packet)
+    },
+    {
+      name: 'documents/Team_Roster.pdf',
+      data: await generateTeamRosterPdf(packet)
+    },
+    {
+      name: 'documents/Incubation_Application.pdf',
+      data: await generateIncubationApplicationPdf(packet)
     },
     { name: 'documents/pitch_deck.pptx', data: createPitchDeckBuffer(packet) },
     {
@@ -162,6 +219,7 @@ const createStartupPackageZip = async (packet = {}) => {
       name: 'documents/executive_summary.pdf',
       data: await createPdfBuffer('Executive Summary', [
         { heading: 'Startup overview', body: packet.summary },
+        { heading: 'Final incubation notes', body: packet.incubationAssets?.startupOverview || packet.incubationAssets?.executiveSummary },
         { heading: 'Current stage', body: packet.stage?.label },
         { heading: 'Readiness score', body: `${packet.readinessScore || 0}%` }
       ])
@@ -188,7 +246,9 @@ const createStartupPackageZip = async (packet = {}) => {
       data: await createPdfBuffer('Feedback Artifact', [
         { heading: 'Validation feedback', body: validationAnswers },
         { heading: 'Demo notes', body: packet.prototypeShowcase?.demoNotes },
-        { heading: 'Demo link', body: packet.prototypeShowcase?.demoLink }
+        { heading: 'Demo link', body: packet.prototypeShowcase?.demoLink },
+        { heading: 'Pitch deck links', body: packet.incubationAssets?.pitchDeckLinks },
+        { heading: 'Demo video links', body: packet.incubationAssets?.demoVideoLinks }
       ])
     }
   ]
@@ -198,5 +258,9 @@ const createStartupPackageZip = async (packet = {}) => {
 
 module.exports = {
   createStartupPackageZip,
-  createZipBuffer
+  createZipBuffer,
+  generateIncubationApplicationPdf,
+  generateProblemStatementPdf,
+  generateStartupIdentityCardPdf,
+  generateTeamRosterPdf
 }
