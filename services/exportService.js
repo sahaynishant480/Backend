@@ -232,14 +232,14 @@ const generateTeamRosterPdf = (packet = {}) => createDesignedPdf('team_roster.pn
 })
 
 const generateIncubationApplicationPdf = (packet = {}) => createDesignedPdf('incubation_application_cover.png', (doc) => {
-  valueField(doc, packet.summary?.startupName, 40, 130, 515, { size: 28, align: 'center', color: '#9ca3af', h: 40 })
-  valueField(doc, `"${packet.summary?.tagline || packet.summary?.elevatorPitch || ''}"`, 55, 188, 485, { size: 17, align: 'center', h: 30 })
-  valueField(doc, packet.summary?.category, 72, 325, 90, { size: 10, align: 'center', h: 18 })
-  valueField(doc, packet.stage?.label, 205, 325, 100, { size: 10, align: 'center', h: 18 })
-  valueField(doc, `${packet.readinessScore || ''}/100`, 338, 330, 95, { size: 10, align: 'center', h: 18 })
-  valueField(doc, dateText(packet.generatedAt), 461, 330, 78, { size: 10, align: 'center', h: 18 })
-  valueField(doc, packet.summary?.founderName || packet.teamDetails?.founder?.name, 58, 440, 225, { size: 18, bold: true, h: 26 })
-  valueField(doc, packet.teamDetails?.founder?.role || 'Startup Lead', 58, 475, 225, { size: 10, color: '#6b7280', h: 18 })
+valueField(doc, packet.summary?.startupName, 40, 140, 515, { size: 28, align: 'center', color: '#9ca3af', h: 40 })
+valueField(doc, `"${packet.summary?.tagline || packet.summary?.elevatorPitch || ''}"`, 55, 198, 485, { size: 17, align: 'center', h: 30 })
+valueField(doc, packet.summary?.category, 72, 335, 90, { size: 10, align: 'center', h: 18 })
+valueField(doc, packet.stage?.label, 205, 335, 100, { size: 10, align: 'center', h: 18 })
+valueField(doc, `${packet.readinessScore || ''}/100`, 338, 340, 95, { size: 10, align: 'center', h: 18 })
+valueField(doc, dateText(packet.generatedAt), 461, 340, 78, { size: 10, align: 'center', h: 18 })
+valueField(doc, packet.summary?.founderName || packet.teamDetails?.founder?.name, 58, 450, 225, { size: 18, bold: true, h: 26 })
+valueField(doc, packet.teamDetails?.founder?.role || 'Startup Lead', 58, 485, 225, { size: 10, color: '#6b7280', h: 18 })
 })
 
 const createStartupPackageZip = async (packet = {}) => {
