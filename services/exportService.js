@@ -143,7 +143,6 @@ const clearBox = (doc, x, y, w, h) => {
   doc.save().rect(x, y, w, h).fill('#ffffff').restore()
 }
 const valueField = (doc, value, x, y, w, opts = {}) => {
-  clearBox(doc, x - 2, y - 2, w + 4, opts.h || 42)
   field(doc, value, x, y, w, opts)
 }
 
