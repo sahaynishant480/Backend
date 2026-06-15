@@ -5,6 +5,7 @@ const Milestone = require('../models/Milestone')
 const ContributionLog = require('../models/ContributionLog')
 const bcrypt = require('bcryptjs')
 const { normalizeLifecycleFilter } = require('../utils/ventureLifecycle')
+const { deleteUserAndAssociatedData } = require('../services/userCleanupService')
 
 const normalizeLabel = (value) => {
   if (typeof value !== 'string') return ''
@@ -590,22 +591,9 @@ exports.deleteUserByAdmin = async (req, res) => {
       return res.status(404).json({ message: 'User not found' })
     }
 
-    const Project = require('../models/Project')
-    const ownedCount = await Project.countDocuments({ owner: user._id })
-    if (ownedCount > 0) {
-      return res.status(400).json({
-        message: 'User owns ventures. Transfer ownership or delete those ventures first.'
-      })
-    }
+    const result = await deleteUserAndAssociatedData(user._id)
 
-    await Project.updateMany(
-      { teamMembers: user._id },
-      { $pull: { teamMembers: user._id, interestedUsers: user._id } }
-    )
-
-    await user.deleteOne()
-
-    res.json({ message: 'User deleted' })
+    res.json({ message: 'User deleted', cleanup: result })
   } catch (error) {
     console.error('Delete user by admin error:', error)
     res.status(500).json({ message: 'Failed to delete user' })
