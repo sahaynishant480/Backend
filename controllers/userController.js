@@ -71,6 +71,8 @@ exports.getProfile = async (req, res) => {
       return res.status(404).json({ message: 'User not found' })
     }
 
+    res.set('Cache-Control', 'no-store, private')
+    res.set('Vary', 'Cookie, Authorization')
     res.json({
       id: user._id,
       name: user.name,
