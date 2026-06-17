@@ -8,6 +8,7 @@ const HackathonAnnouncement = require('../models/HackathonAnnouncement')
 const { logAdminAction } = require('../services/adminActionLogger')
 
 const adminId = (req) => req.user?._id || req.user?.userId
+const projectTeamPopulate = [{ path: 'owner', select: 'name email' }, { path: 'teamMembers', select: 'name email' }]
 const toArray = (value) => Array.isArray(value)
   ? value.map((item) => String(item).trim()).filter(Boolean)
   : typeof value === 'string'
@@ -47,7 +48,8 @@ const buildHackathonResults = async (hackathonId) => {
     Hackathon.findById(hackathonId).lean(),
     HackathonStage.find({ hackathon: hackathonId }).sort({ order: 1 }).lean(),
     HackathonRegistration.find({ hackathon: hackathonId })
-      .populate({ path: 'project', select: 'title owner teamMembers', populate: [{ path: 'owner', select: 'name email' }, { path: 'teamMembers', select: 'name email' }] })
+      .populate({ path: 'project', select: 'title category owner teamMembers', populate: projectTeamPopulate })
+      .populate('registeredUsers', 'name email role')
       .lean(),
     JudgeReview.find({ hackathon: hackathonId }).populate('judge', 'name email').populate('criteriaScores.criteria', 'criteriaName maximumMarks').lean(),
     JudgingCriteria.find({}).lean()
@@ -76,11 +78,15 @@ const buildHackathonResults = async (hackathonId) => {
       const maximum = stageMax * Math.max(1, stageReviews.length)
       totalObtainedMarks += obtained
       totalMaximumMarks += maximum
-      return { stageId: stage._id, stageName: stage.stageName, criteria: criteriaList, obtainedMarks: obtained, maximumMarks: maximum, feedback: stageReviews.map((r) => ({ judge: r.judge, feedback: r.feedback })) }
+      return { stageId: stage._id, stageName: stage.stageName, criteria: criteriaList, obtainedMarks: obtained, maximumMarks: maximum, reviews: stageReviews.map((r) => ({ judge: r.judge, feedback: r.feedback, criteriaScores: r.criteriaScores })) }
     })
-    return { registrationId: registration._id, project: registration.project, teamMembers: registration.project?.teamMembers || [], stageWiseMarks, totalObtainedMarks, totalMaximumMarks }
+    return { registrationId: registration._id, registrationStatus: registration.registrationStatus, project: registration.project, owner: registration.project?.owner, teamMembers: registration.project?.teamMembers || registration.registeredUsers || [], stageWiseMarks, totalObtainedMarks, totalMaximumMarks }
   }).sort((a, b) => b.totalObtainedMarks - a.totalObtainedMarks)
-  rows.forEach((row, index) => { row.rank = index + 1; row.percentage = row.totalMaximumMarks ? Math.round((row.totalObtainedMarks / row.totalMaximumMarks) * 10000) / 100 : 0 })
+  rows.forEach((row, index) => {
+    const previous = rows[index - 1]
+    row.rank = previous && previous.totalObtainedMarks === row.totalObtainedMarks ? previous.rank : index + 1
+    row.percentage = row.totalMaximumMarks ? Math.round((row.totalObtainedMarks / row.totalMaximumMarks) * 10000) / 100 : 0
+  })
   return { hackathon, stages, rankings: rows }
 }
 
@@ -133,7 +139,7 @@ exports.updateHackathon = async (req, res) => {
 exports.listHackathonRegistrations = async (req, res) => {
   try {
     const registrations = await HackathonRegistration.find({ hackathon: req.params.id })
-      .populate('project', 'title category lifecycleStage owner teamMembers')
+      .populate({ path: 'project', select: 'title category lifecycleStage owner teamMembers', populate: projectTeamPopulate })
       .populate('registeredUsers', 'name email role')
       .sort({ submittedAt: -1 })
       .lean()
@@ -369,7 +375,7 @@ exports.submitHackathonProject = async (req, res) => {
 
 exports.listHackathonSubmissions = async (req, res) => {
   try {
-    const submissions = await HackathonSubmission.find({ hackathon: req.params.id }).populate('project', 'title owner teamMembers').populate('registration').sort({ submittedAt: -1 }).lean()
+    const submissions = await HackathonSubmission.find({ hackathon: req.params.id }).populate({ path: 'project', select: 'title category owner teamMembers', populate: projectTeamPopulate }).populate('registration').sort({ submittedAt: -1 }).lean()
     res.json({ submissions })
   } catch (error) {
     console.error('List hackathon submissions error:', error)
