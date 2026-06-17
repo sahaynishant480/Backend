@@ -1,6 +1,7 @@
 const Opportunity = require('../models/Opportunity')
 const Hackathon = require('../models/Hackathon')
 const HackathonRegistration = require('../models/HackathonRegistration')
+const HackathonAnnouncement = require('../models/HackathonAnnouncement')
 const Project = require('../models/Project')
 
 const publicHackathonQuery = { status: { $in: ['published', 'active'] }, visibility: 'public' }
@@ -14,7 +15,8 @@ const mapHackathonOpportunity = (hackathon) => ({
   organization: hackathon.organizer,
   deadline: hackathon.endDate,
   prize: (hackathon.prizes || []).join(', '),
-  applyLink: '',
+  applyLink: hackathon.rules || '',
+  status: hackathon.status,
   createdAt: hackathon.createdAt
 })
 
@@ -62,6 +64,19 @@ exports.createOpportunity = async (req, res) => {
   try {
     const { type, title, description, organization, applyLink, deadline, prize, amount, location } = req.body
     if (!type || !title) return res.status(400).json({ message: 'Type and title are required' })
+    if (type === 'hackathon') {
+      const hackathon = await Hackathon.create({
+        title,
+        description,
+        organizer: organization,
+        rules: applyLink,
+        endDate: deadline ? new Date(deadline) : undefined,
+        prizes: prize || amount ? [prize || amount] : [],
+        status: 'published',
+        visibility: 'public'
+      })
+      return res.status(201).json({ opportunity: mapHackathonOpportunity(hackathon) })
+    }
     const opportunity = await Opportunity.create({
       type, title, description, organization, applyLink,
       deadline: deadline ? new Date(deadline) : undefined,
@@ -71,6 +86,21 @@ exports.createOpportunity = async (req, res) => {
   } catch (error) {
     console.error('Create opportunity error:', error)
     res.status(500).json({ message: 'Failed to create opportunity' })
+  }
+}
+
+exports.getHackathonPublicDetails = async (req, res) => {
+  try {
+    const userId = req.user?.userId || req.user?._id
+    const hackathon = await Hackathon.findOne({ _id: req.params.id, status: { $in: ['active', 'completed'] }, visibility: 'public' }).lean()
+    if (!hackathon) return res.status(404).json({ message: 'Hackathon is not active yet' })
+    const registration = await HackathonRegistration.findOne({ hackathon: hackathon._id, registeredUsers: userId }).populate('project', 'title').lean()
+    if (!registration) return res.status(403).json({ message: 'Only registered teams can open this hackathon workspace' })
+    const announcements = await HackathonAnnouncement.find({ hackathon: hackathon._id }).sort({ createdAt: -1 }).lean()
+    res.json({ hackathon, registration, announcements })
+  } catch (error) {
+    console.error('Get public hackathon detail error:', error)
+    res.status(500).json({ message: 'Failed to open hackathon' })
   }
 }
 

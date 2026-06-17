@@ -1,10 +1,11 @@
 const express = require('express')
 const router = express.Router()
-const { getOpportunities, registerHackathonProject, createOpportunity, updateOpportunity, deleteOpportunity } = require('../controllers/opportunityController')
+const { getOpportunities, registerHackathonProject, getHackathonPublicDetails, createOpportunity, updateOpportunity, deleteOpportunity } = require('../controllers/opportunityController')
 const { protect } = require('../middleware/authMiddleware')
 const { requireRole } = require('../middleware/rbac')
 
 router.get('/', getOpportunities)
+router.get('/hackathons/:id', protect, getHackathonPublicDetails)
 router.post('/hackathons/:id/register', protect, registerHackathonProject)
 router.post('/', protect, requireRole('admin'), createOpportunity)
 router.put('/:id', protect, requireRole('admin'), updateOpportunity)

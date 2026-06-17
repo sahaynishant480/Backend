@@ -486,7 +486,7 @@ exports.createHackathonAnnouncement = async (req, res) => {
     const announcement = await HackathonAnnouncement.create({ ...req.body, hackathon: req.params.id, createdBy: adminId(req) })
     const registrations = await HackathonRegistration.find({ hackathon: req.params.id }).select('registeredUsers')
     const recipients = [...new Set(registrations.flatMap((r) => (r.registeredUsers || []).map((u) => u.toString())))]
-    if (recipients.length) await Notification.insertMany(recipients.map((recipient) => ({ recipient, type: 'hackathon_announcement', title: announcement.title, message: announcement.message, actionUrl: '/opportunities' })), { ordered: false })
+    if (recipients.length) await Notification.insertMany(recipients.map((recipient) => ({ recipient, type: 'hackathon_announcement', title: announcement.title, message: announcement.message, actionUrl: `/opportunities?hackathon=${req.params.id}` })), { ordered: false })
     await logAdminAction({ adminUser: adminId(req), action: 'create_hackathon_announcement', targetType: 'hackathon_announcement', targetId: announcement._id })
     res.status(201).json({ announcement })
   } catch (error) {
