@@ -6,6 +6,7 @@ const JudgeReview = require('../models/JudgeReview')
 const HackathonSubmission = require('../models/HackathonSubmission')
 const HackathonAnnouncement = require('../models/HackathonAnnouncement')
 const Notification = require('../models/Notification')
+const Project = require('../models/Project')
 const PDFDocument = require('pdfkit')
 const { logAdminAction } = require('../services/adminActionLogger')
 
@@ -176,6 +177,31 @@ exports.listHackathonRegistrations = async (req, res) => {
   } catch (error) {
     console.error('List hackathon registrations error:', error)
     res.status(500).json({ message: 'Failed to load registrations' })
+  }
+}
+
+exports.createHackathonRegistration = async (req, res) => {
+  try {
+    const { projectId } = req.body
+    if (!projectId) return res.status(400).json({ message: 'Project is required' })
+    const [hackathon, project] = await Promise.all([
+      Hackathon.findById(req.params.id),
+      Project.findById(projectId).select('owner teamMembers')
+    ])
+    if (!hackathon) return res.status(404).json({ message: 'Hackathon not found' })
+    if (!project) return res.status(404).json({ message: 'Project not found' })
+    const registeredUsers = [project.owner, ...(project.teamMembers || [])].filter(Boolean)
+    const registration = await HackathonRegistration.findOneAndUpdate(
+      { hackathon: hackathon._id, project: project._id },
+      { hackathon: hackathon._id, project: project._id, registeredUsers, registrationStatus: 'pending', submittedAt: new Date() },
+      { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
+    ).populate({ path: 'project', select: 'title category lifecycleStage owner teamMembers', populate: projectTeamPopulate }).populate('registeredUsers', 'name email role')
+    await logAdminAction({ adminUser: adminId(req), action: 'create_hackathon_registration', targetType: 'hackathon_registration', targetId: registration._id, details: { hackathonId: req.params.id, projectId } })
+    res.status(201).json({ registration })
+  } catch (error) {
+    if (error?.code === 11000) return res.status(409).json({ message: 'Project is already registered' })
+    console.error('Create hackathon registration error:', error)
+    res.status(500).json({ message: 'Failed to register project' })
   }
 }
 

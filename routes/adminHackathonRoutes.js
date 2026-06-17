@@ -9,6 +9,7 @@ const {
   approveHackathon,
   archiveHackathon,
   listHackathonRegistrations,
+  createHackathonRegistration,
   getHackathonRegistrationDetails,
   updateHackathonRegistrationStatus,
   createHackathonStage,
@@ -42,6 +43,7 @@ router.patch('/:id', requireRole('admin'), updateHackathon)
 router.patch('/:id/approve', requireRole('admin'), approveHackathon)
 router.delete('/:id', requireRole('admin'), archiveHackathon)
 router.get('/:id/registrations', requireRole('admin'), listHackathonRegistrations)
+router.post('/:id/registrations', requireRole('admin'), createHackathonRegistration)
 router.get('/:id/registrations/:registrationId', requireRole('admin'), getHackathonRegistrationDetails)
 router.patch('/:id/registrations/:registrationId/status', requireRole('admin'), updateHackathonRegistrationStatus)
 router.get('/:id/stages', requireRole('admin'), listHackathonStages)
