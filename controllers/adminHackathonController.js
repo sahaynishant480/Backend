@@ -94,6 +94,8 @@ exports.createHackathon = async (req, res) => {
   try {
     const payload = pickFields(req.body)
     if (!payload.title) return res.status(400).json({ message: 'Hackathon title is required' })
+    if (!payload.status) payload.status = 'published'
+    if (!payload.visibility) payload.visibility = 'public'
     const hackathon = await Hackathon.create(payload)
     await logAdminAction({ adminUser: adminId(req), action: 'create_hackathon', targetType: 'hackathon', targetId: hackathon._id })
     res.status(201).json({ hackathon })
