@@ -5,6 +5,8 @@ const JudgingCriteria = require('../models/JudgingCriteria')
 const JudgeReview = require('../models/JudgeReview')
 const HackathonSubmission = require('../models/HackathonSubmission')
 const HackathonAnnouncement = require('../models/HackathonAnnouncement')
+const Notification = require('../models/Notification')
+const PDFDocument = require('pdfkit')
 const { logAdminAction } = require('../services/adminActionLogger')
 
 const adminId = (req) => req.user?._id || req.user?.userId
@@ -78,7 +80,7 @@ const buildHackathonResults = async (hackathonId) => {
       const maximum = stageMax * Math.max(1, stageReviews.length)
       totalObtainedMarks += obtained
       totalMaximumMarks += maximum
-      return { stageId: stage._id, stageName: stage.stageName, criteria: criteriaList, obtainedMarks: obtained, maximumMarks: maximum, reviews: stageReviews.map((r) => ({ judge: r.judge, feedback: r.feedback, criteriaScores: r.criteriaScores })) }
+      return { stageId: stage._id, stageName: stage.stageName, criteria: criteriaList, obtainedMarks: obtained, maximumMarks: maximum, reviews: stageReviews.map((r) => ({ _id: r._id, judge: r.judge, feedback: r.feedback, criteriaScores: r.criteriaScores })) }
     })
     return { registrationId: registration._id, registrationStatus: registration.registrationStatus, project: registration.project, owner: registration.project?.owner, teamMembers: registration.project?.teamMembers || registration.registeredUsers || [], stageWiseMarks, totalObtainedMarks, totalMaximumMarks }
   }).sort((a, b) => b.totalObtainedMarks - a.totalObtainedMarks)
@@ -123,6 +125,31 @@ exports.getHackathonDetails = async (req, res) => {
   } catch (error) {
     console.error('Hackathon detail error:', error)
     res.status(500).json({ message: 'Failed to load hackathon' })
+  }
+}
+
+exports.approveHackathon = async (req, res) => {
+  try {
+    const hackathon = await Hackathon.findByIdAndUpdate(req.params.id, { status: 'published', visibility: 'public' }, { new: true, runValidators: true })
+    if (!hackathon) return res.status(404).json({ message: 'Hackathon not found' })
+    await logAdminAction({ adminUser: adminId(req), action: 'approve_hackathon', targetType: 'hackathon', targetId: hackathon._id })
+    res.json({ hackathon })
+  } catch (error) {
+    console.error('Approve hackathon error:', error)
+    sendHackathonError(res, error, 'Failed to approve hackathon')
+  }
+}
+
+exports.archiveHackathon = async (req, res) => {
+  try {
+    if (req.body?.confirm !== 'DELETE_HACKATHON') return res.status(400).json({ message: 'Confirmation required' })
+    const hackathon = await Hackathon.findByIdAndUpdate(req.params.id, { status: 'archived', visibility: 'private' }, { new: true, runValidators: true })
+    if (!hackathon) return res.status(404).json({ message: 'Hackathon not found' })
+    await logAdminAction({ adminUser: adminId(req), action: 'archive_hackathon', targetType: 'hackathon', targetId: hackathon._id })
+    res.json({ hackathon })
+  } catch (error) {
+    console.error('Archive hackathon error:', error)
+    sendHackathonError(res, error, 'Failed to archive hackathon')
   }
 }
 
@@ -255,16 +282,11 @@ exports.createJudgeReview = async (req, res) => {
   try {
     const criteriaScores = req.body.criteriaScores || []
     const marks = await calculateReviewMarks(criteriaScores)
-    const review = await JudgeReview.create({
-      hackathon: req.params.id,
-      stage: req.params.stageId,
-      registration: req.params.registrationId,
-      judge: adminId(req),
-      criteriaScores,
-      ...marks,
-      feedback: req.body.feedback || '',
-      submittedAt: new Date()
-    })
+    const review = await JudgeReview.findOneAndUpdate(
+      { hackathon: req.params.id, stage: req.params.stageId, registration: req.params.registrationId, judge: adminId(req) },
+      { hackathon: req.params.id, stage: req.params.stageId, registration: req.params.registrationId, judge: adminId(req), criteriaScores, ...marks, feedback: req.body.feedback || '', submittedAt: new Date() },
+      { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
+    )
     await logAdminAction({ adminUser: adminId(req), action: 'create_judge_review', targetType: 'judge_review', targetId: review._id })
     res.status(201).json({ review })
   } catch (error) {
@@ -340,6 +362,42 @@ exports.getHackathonReport = async (req, res) => {
   }
 }
 
+exports.downloadHackathonCsv = async (req, res) => {
+  try {
+    const data = await buildHackathonResults(req.params.id)
+    const lines = ['Rank,Project Name,Team Name,Stage,Total Score']
+    data.rankings.forEach((row) => row.stageWiseMarks.forEach((stage) => lines.push([row.rank, row.project?.title || '', (row.teamMembers || []).map((m) => m.name || m.email).join(' / '), stage.stageName, `${row.totalObtainedMarks}/${row.totalMaximumMarks}`].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))))
+    res.setHeader('Content-Type', 'text/csv')
+    res.setHeader('Content-Disposition', 'attachment; filename=hackathon_report.csv')
+    res.send(lines.join('\n'))
+  } catch (error) {
+    console.error('Hackathon CSV error:', error)
+    res.status(500).json({ message: 'Failed to export CSV' })
+  }
+}
+
+exports.downloadHackathonPdf = async (req, res) => {
+  try {
+    const data = await buildHackathonResults(req.params.id)
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', 'attachment; filename=hackathon_report.pdf')
+    const doc = new PDFDocument({ margin: 40 })
+    doc.pipe(res)
+    doc.fontSize(18).text(data.hackathon?.title || 'Hackathon Report')
+    data.rankings.forEach((row) => {
+      doc.moveDown().fontSize(12).text(`#${row.rank} ${row.project?.title || 'Project'} - ${row.totalObtainedMarks}/${row.totalMaximumMarks}`)
+      row.stageWiseMarks.forEach((stage) => {
+        doc.fontSize(10).text(`${stage.stageName}: ${stage.obtainedMarks}/${stage.maximumMarks}`)
+        stage.reviews.forEach((review) => (review.criteriaScores || []).forEach((score) => doc.text(`- ${score.criteria?.criteriaName || 'Criteria'}: ${score.obtainedMarks}/${score.criteria?.maximumMarks || ''}`)))
+      })
+    })
+    doc.end()
+  } catch (error) {
+    console.error('Hackathon PDF error:', error)
+    res.status(500).json({ message: 'Failed to export PDF' })
+  }
+}
+
 exports.getHackathonExportData = async (req, res) => {
   try {
     const data = await buildHackathonResults(req.params.id)
@@ -400,6 +458,9 @@ exports.updateHackathonSubmissionStatus = async (req, res) => {
 exports.createHackathonAnnouncement = async (req, res) => {
   try {
     const announcement = await HackathonAnnouncement.create({ ...req.body, hackathon: req.params.id, createdBy: adminId(req) })
+    const registrations = await HackathonRegistration.find({ hackathon: req.params.id }).select('registeredUsers')
+    const recipients = [...new Set(registrations.flatMap((r) => (r.registeredUsers || []).map((u) => u.toString())))]
+    if (recipients.length) await Notification.insertMany(recipients.map((recipient) => ({ recipient, type: 'hackathon_announcement', title: announcement.title, message: announcement.message, actionUrl: '/opportunities' })), { ordered: false })
     await logAdminAction({ adminUser: adminId(req), action: 'create_hackathon_announcement', targetType: 'hackathon_announcement', targetId: announcement._id })
     res.status(201).json({ announcement })
   } catch (error) {

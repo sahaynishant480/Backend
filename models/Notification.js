@@ -5,7 +5,7 @@ const NotificationSchema = new mongoose.Schema({
   type: { 
     type: String, 
     required: true,
-    enum: ['join_request', 'join_accepted', 'join_rejected', 'validation_feedback', 'mention', 'project_featured', 'team_full']
+    enum: ['join_request', 'join_accepted', 'join_rejected', 'validation_feedback', 'mention', 'project_featured', 'team_full', 'hackathon_announcement']
   },
   title: { type: String, required: true },
   message: { type: String, required: true },
