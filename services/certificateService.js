@@ -24,7 +24,7 @@ const formatDate = (value) => {
 }
 
 const buildVerificationUrl = (certificateId) => {
-  const appBase = process.env.FRONTEND_URL || process.env.PUBLIC_APP_BASE || 'https://collab.qzz.io'
+  const appBase = process.env.FRONTEND_URL || process.env.PUBLIC_APP_BASE || 'https://www.joincollab.org'
   return `${appBase.replace(/\/$/, '')}/verify/${certificateId}`
 }
 

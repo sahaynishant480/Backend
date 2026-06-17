@@ -2,6 +2,8 @@ const jwtConfig = require('../config/jwt')
 
 const getCookieOptions = () => {
   const isProd = process.env.NODE_ENV === 'production'
+  const configuredDomain = process.env.COOKIE_DOMAIN?.trim()
+  const cookieDomain = configuredDomain?.includes('qzz.io') ? '.joincollab.org' : configuredDomain
   const options = {
     httpOnly: true,
     secure: isProd,
@@ -9,8 +11,8 @@ const getCookieOptions = () => {
     maxAge: jwtConfig.cookieMaxAgeMs,
     path: '/'
   }
-  if (process.env.COOKIE_DOMAIN) {
-    options.domain = process.env.COOKIE_DOMAIN
+  if (cookieDomain) {
+    options.domain = cookieDomain
   }
   return options
 }

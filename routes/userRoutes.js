@@ -14,7 +14,11 @@ const {
   lookupUserById,
   createUserByAdmin,
   updateUserByAdmin,
-  deleteUserByAdmin
+  deleteUserByAdmin,
+  getAdminContent,
+  deleteProjectByAdmin,
+  deleteMilestoneByAdmin,
+  deleteBlockerByAdmin
 } = require('../controllers/userController')
 const validate = require('../middleware/validate')
 const { requireRole } = require('../middleware/rbac')
@@ -28,6 +32,10 @@ router.get('/projects', validate(z.object({ query: userProjectsQuery })), getUse
 router.get('/all', requireRole('admin'), validate(z.object({ query: paginationQuery.passthrough() })), getAllUsers)
 router.get('/activity', requireRole('admin'), validate(z.object({ query: activityQuery })), getUserActivity)
 router.get('/admin-stats', requireRole('admin'), validate(emptyBody), getAdminStats)
+router.get('/admin-content', requireRole('admin'), validate(emptyBody), getAdminContent)
+router.delete('/admin-content/projects/:id', requireRole('admin'), validate(z.object({ params: z.object({ id: objectId }) })), deleteProjectByAdmin)
+router.delete('/admin-content/milestones/:id', requireRole('admin'), validate(z.object({ params: z.object({ id: objectId }) })), deleteMilestoneByAdmin)
+router.delete('/admin-content/milestones/:id/blockers/:blockerId', requireRole('admin'), deleteBlockerByAdmin)
 router.get('/lookup/:id', validate(z.object({ params: z.object({ id: objectId }) })), lookupUserById)
 router.get('/:id', requireRole('admin'), validate(z.object({ params: z.object({ id: objectId }) })), getUserById)
 router.post('/', requireRole('admin'), validate(user.adminCreateUserBody), createUserByAdmin)

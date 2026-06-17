@@ -25,8 +25,11 @@ const {
 
 const toId = (value) => (value ? value.toString() : '')
 const FILE_LINK_TTL_SECONDS = Math.max(60, parseInt(process.env.FILE_LINK_TTL_SECONDS || '900', 10) || 900)
-const FILE_ACCESS_SECRET = process.env.FILE_ACCESS_SECRET || process.env.JWT_SECRET || 'collab-file-access-secret'
-const PUBLIC_API_BASE = (process.env.PUBLIC_API_BASE || 'https://api.collab.qzz.io').replace(/\/$/, '')
+if (process.env.NODE_ENV === 'production' && !process.env.FILE_ACCESS_SECRET) {
+  throw new Error('FILE_ACCESS_SECRET is required in production')
+}
+const FILE_ACCESS_SECRET = process.env.FILE_ACCESS_SECRET || process.env.JWT_SECRET || 'collab-dev-file-access-secret'
+const PUBLIC_API_BASE = (process.env.PUBLIC_API_BASE || 'https://api.joincollab.org').replace(/\/$/, '')
 const PROJECT_VISIBILITY = new Set(['private', 'college', 'global'])
 const REVIEWABLE_LIFECYCLE_STAGES = new Set(['building', 'mvp', 'validation'])
 const ACTIVE_LIFECYCLE_STAGES = new Set(['idea', 'planning', 'building', 'mvp', 'validation', 'pivoted'])
@@ -1989,7 +1992,7 @@ exports.startValidation = async (req, res) => {
       impact: 'Validation questions, evidence, and readiness materials were activated inside the startup workspace.'
     })
 
-    const apiBase = (process.env.PUBLIC_API_BASE || 'https://api.collab.qzz.io').replace(/\/$/, '')
+    const apiBase = (process.env.PUBLIC_API_BASE || 'https://api.joincollab.org').replace(/\/$/, '')
     const certMap = new Map(certificates.map((cert) => [toId(cert.user), cert]))
 
     const emailResults = await Promise.allSettled(

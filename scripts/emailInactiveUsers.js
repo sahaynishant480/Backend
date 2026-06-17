@@ -7,7 +7,7 @@ const HOURS = Number(process.env.INACTIVE_HOURS || 48)
 const LIMIT = Number(process.env.LIMIT || 0)
 const DRY_RUN = String(process.env.DRY_RUN || 'false').toLowerCase() === 'true'
 const INCLUDE_ADMINS = String(process.env.INCLUDE_ADMINS || 'false').toLowerCase() === 'true'
-const FRONTEND_URL = (process.env.FRONTEND_URL || 'https://collab.qzz.io').replace(/\/$/, '')
+const FRONTEND_URL = (process.env.FRONTEND_URL || 'https://www.joincollab.org').replace(/\/$/, '')
 const UNSUBSCRIBE_URL = (process.env.UNSUBSCRIBE_URL || `${FRONTEND_URL}/unsubscribe`).trim()
 
 const run = async () => {

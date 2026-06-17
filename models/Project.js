@@ -192,7 +192,38 @@ const ProjectSchema = new mongoose.Schema({
     size: { type: Number, required: true },
     uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     uploadedAt: { type: Date, default: Date.now }
-  }]
+  }],
+
+  // Startup Pipeline Data
+  pipeline: {
+    foundation: {
+      tagline: { type: String, default: '' },
+      descriptorWords: [{ type: String }]
+    },
+
+    purpose: {
+      founderInspiration: { type: String, default: '' },
+      impactStatement: { type: String, default: '' }
+    },
+
+    readiness: {
+      notes: { type: String, default: '' }
+    },
+
+    mvp: {
+      roadmap: { type: String, default: '' },
+      figmaLinks: [{ type: String }],
+      githubLinks: [{ type: String }],
+      demoLinks: [{ type: String }]
+    },
+
+    incubation: {
+      executiveSummary: { type: String, default: '' },
+      pitchDeckLinks: [{ type: String }],
+      demoVideoLinks: [{ type: String }],
+      startupOverview: { type: String, default: '' }
+    }
+  }
 }, { timestamps: true })
 
 ProjectSchema.pre('validate', function(next) {

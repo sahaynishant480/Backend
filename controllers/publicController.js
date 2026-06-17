@@ -51,7 +51,7 @@ exports.getCertificate = async (req, res) => {
       .populate('college', 'name')
 
     if (certificate) {
-      const apiBase = (process.env.PUBLIC_API_BASE || 'https://api.collab.qzz.io').replace(/\/$/, '')
+      const apiBase = (process.env.PUBLIC_API_BASE || 'https://api.joincollab.org').replace(/\/$/, '')
       const downloadUrl = `${apiBase}${certificate.url}`
       const verification = verifyCertificateRecord(certificate)
       return res.json({
@@ -99,7 +99,7 @@ exports.getCertificate = async (req, res) => {
       return res.status(404).json({ message: 'Certificate not found' })
     }
 
-    const apiBase = (process.env.PUBLIC_API_BASE || 'https://api.collab.qzz.io').replace(/\/$/, '')
+    const apiBase = (process.env.PUBLIC_API_BASE || 'https://api.joincollab.org').replace(/\/$/, '')
     const downloadUrl = `${apiBase}${cert.url}`
     const certRecord = cert.toObject?.() || cert
     const verification = verifyCertificateRecord({

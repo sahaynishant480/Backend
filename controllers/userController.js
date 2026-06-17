@@ -600,6 +600,73 @@ exports.deleteUserByAdmin = async (req, res) => {
   }
 }
 
+exports.getAdminContent = async (req, res) => {
+  try {
+    const [projects, milestones] = await Promise.all([
+      Project.find({})
+        .select('title category owner teamMembers lifecycleStage createdAt')
+        .populate('owner', 'name email')
+        .sort({ createdAt: -1 })
+        .limit(100)
+        .lean(),
+      Milestone.find({})
+        .select('title status projectId owner createdBy blockerDetails blockers createdAt')
+        .populate('owner', 'name email')
+        .populate('createdBy', 'name email')
+        .sort({ createdAt: -1 })
+        .limit(200)
+        .lean()
+    ])
+    res.json({ projects, milestones })
+  } catch (error) {
+    console.error('Get admin content error:', error)
+    res.status(500).json({ message: 'Failed to load admin content' })
+  }
+}
+
+exports.deleteProjectByAdmin = async (req, res) => {
+  try {
+    const project = await Project.findByIdAndDelete(req.params.id)
+    if (!project) return res.status(404).json({ message: 'Venture not found' })
+    await Promise.all([
+      Milestone.deleteMany({ projectId: project._id }),
+      ContributionLog.deleteMany({ projectId: project._id })
+    ])
+    res.json({ message: 'Venture deleted' })
+  } catch (error) {
+    console.error('Admin delete venture error:', error)
+    res.status(500).json({ message: 'Failed to delete venture' })
+  }
+}
+
+exports.deleteMilestoneByAdmin = async (req, res) => {
+  try {
+    const milestone = await Milestone.findByIdAndDelete(req.params.id)
+    if (!milestone) return res.status(404).json({ message: 'Milestone not found' })
+    await ContributionLog.deleteMany({ milestoneId: milestone._id })
+    res.json({ message: 'Milestone deleted' })
+  } catch (error) {
+    console.error('Admin delete milestone error:', error)
+    res.status(500).json({ message: 'Failed to delete milestone' })
+  }
+}
+
+exports.deleteBlockerByAdmin = async (req, res) => {
+  try {
+    const { id, blockerId } = req.params
+    const milestone = await Milestone.findById(id)
+    if (!milestone) return res.status(404).json({ message: 'Milestone not found' })
+    milestone.blockerDetails = (milestone.blockerDetails || []).filter((blocker) => blocker.blockerId !== blockerId)
+    const index = Number(blockerId)
+    if (Number.isInteger(index) && index >= 0) milestone.blockers.splice(index, 1)
+    await milestone.save()
+    res.json({ message: 'Blocker deleted' })
+  } catch (error) {
+    console.error('Admin delete blocker error:', error)
+    res.status(500).json({ message: 'Failed to delete blocker' })
+  }
+}
+
 exports.getUserActivity = async (req, res) => {
   try {
     if (req.user?.role !== 'admin') {

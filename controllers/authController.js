@@ -42,7 +42,7 @@ const getOwnerEmail = () => process.env.OWNER_EMAIL?.toLowerCase().trim()
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const getFrontendBaseUrl = () => {
-  const base = process.env.FRONTEND_URL || 'https://collab.qzz.io'
+  const base = process.env.FRONTEND_URL || 'https://www.joincollab.org'
   return base.replace(/\/$/, '')
 }
 

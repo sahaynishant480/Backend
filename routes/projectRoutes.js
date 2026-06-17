@@ -63,7 +63,37 @@ const storage = multer.diskStorage({
     cb(null, unique)
   }
 })
-const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024 } })
+const allowedUploadExtensions = new Set([
+  '.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp',
+  '.mp4', '.mov', '.webm',
+  '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.csv', '.txt'
+])
+const allowedDocumentMimeTypes = new Set([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/csv',
+  'text/plain'
+])
+const fileFilter = (req, file, cb) => {
+  const ext = path.extname(file.originalname || '').toLowerCase()
+  const mime = file.mimetype || ''
+  const isAllowedMedia = mime.startsWith('image/') || mime.startsWith('video/')
+  const isAllowedDocument = allowedDocumentMimeTypes.has(mime)
+
+  if (allowedUploadExtensions.has(ext) && (isAllowedMedia || isAllowedDocument)) {
+    return cb(null, true)
+  }
+
+  const error = new Error('Unsupported file type. Upload PDFs, images, videos, or supported document files only.')
+  error.status = 400
+  return cb(error)
+}
+const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024 }, fileFilter })
 
 // Basic CRUD
 router.post('/', validate(project.createProjectBody), createProject)

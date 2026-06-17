@@ -15,7 +15,11 @@ let server
 const startServer = async () => {
   try {
     validateEnv()
-    await initRedis()
+    try {
+      await initRedis()
+    } catch (err) {
+      console.warn('[redis] disabled locally:', err.message)
+    }
     app = require('./app')
 
     const uploadsDir = path.join(__dirname, 'uploads')

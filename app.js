@@ -63,8 +63,8 @@ const envOrigins = (process.env.CORS_ORIGINS || '')
   .filter(Boolean)
 
 const allowedOrigins = new Set([
-  'https://collab.qzz.io',
-  'https://www.collab.qzz.io',
+  'https://joincollab.org',
+  'https://www.joincollab.org',
   'https://collab-frontend-five.vercel.app',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
@@ -89,8 +89,6 @@ app.use(cors({
   },
   credentials: true
 }))
-
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
 
 app.use((req, res, next) => {
   if (process.env.NODE_ENV !== 'test') {
@@ -136,6 +134,17 @@ app.use('/api/ventures', protect, projectRoutes)
 const userRoutes = require('./routes/userRoutes')
 app.use('/users', protect, userRoutes)
 app.use('/api/users', protect, userRoutes)
+
+// Admin routes (protected)
+const adminRoutes = require('./routes/adminRoutes')
+const adminProjectRoutes = require('./routes/adminProjectRoutes')
+const adminHackathonRoutes = require('./routes/adminHackathonRoutes')
+app.use('/admin/project-records', protect, adminProjectRoutes)
+app.use('/api/admin/project-records', protect, adminProjectRoutes)
+app.use('/admin/hackathons', protect, adminHackathonRoutes)
+app.use('/api/admin/hackathons', protect, adminHackathonRoutes)
+app.use('/admin', protect, adminRoutes)
+app.use('/api/admin', protect, adminRoutes)
 
 // Notification routes (protected)
 const notificationRoutes = require('./routes/notificationRoutes')
