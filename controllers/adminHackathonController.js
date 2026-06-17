@@ -8,12 +8,25 @@ const HackathonAnnouncement = require('../models/HackathonAnnouncement')
 const { logAdminAction } = require('../services/adminActionLogger')
 
 const adminId = (req) => req.user?._id || req.user?.userId
+const toArray = (value) => Array.isArray(value)
+  ? value.map((item) => String(item).trim()).filter(Boolean)
+  : typeof value === 'string'
+    ? value.split(',').map((item) => item.trim()).filter(Boolean)
+    : []
 const pickFields = (body = {}) => {
   const allowed = ['title', 'description', 'organizer', 'startDate', 'endDate', 'rules', 'eligibility', 'themes', 'prizes', 'status', 'visibility']
   return allowed.reduce((acc, field) => {
-    if (body[field] !== undefined) acc[field] = body[field]
+    if (body[field] === undefined) return acc
+    if ((field === 'startDate' || field === 'endDate') && body[field] === '') return acc
+    if (field === 'themes' || field === 'prizes') acc[field] = toArray(body[field])
+    else if (typeof body[field] === 'string') acc[field] = body[field].trim()
+    else acc[field] = body[field]
     return acc
   }, {})
+}
+const sendHackathonError = (res, error, fallback) => {
+  const isValidation = error?.name === 'ValidationError' || error?.name === 'CastError'
+  res.status(isValidation ? 400 : 500).json({ message: isValidation ? error.message : fallback })
 }
 const calculateReviewMarks = async (criteriaScores = []) => {
   const ids = criteriaScores.map((item) => item.criteria).filter(Boolean)
@@ -73,12 +86,14 @@ const buildHackathonResults = async (hackathonId) => {
 
 exports.createHackathon = async (req, res) => {
   try {
-    const hackathon = await Hackathon.create(pickFields(req.body))
+    const payload = pickFields(req.body)
+    if (!payload.title) return res.status(400).json({ message: 'Hackathon title is required' })
+    const hackathon = await Hackathon.create(payload)
     await logAdminAction({ adminUser: adminId(req), action: 'create_hackathon', targetType: 'hackathon', targetId: hackathon._id })
     res.status(201).json({ hackathon })
   } catch (error) {
     console.error('Create hackathon error:', error)
-    res.status(500).json({ message: 'Failed to create hackathon' })
+    sendHackathonError(res, error, 'Failed to create hackathon')
   }
 }
 
@@ -111,7 +126,7 @@ exports.updateHackathon = async (req, res) => {
     res.json({ hackathon })
   } catch (error) {
     console.error('Update hackathon error:', error)
-    res.status(500).json({ message: 'Failed to update hackathon' })
+    sendHackathonError(res, error, 'Failed to update hackathon')
   }
 }
 

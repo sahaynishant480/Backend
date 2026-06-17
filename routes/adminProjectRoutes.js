@@ -14,6 +14,7 @@ const {
   deleteAdminProjectMilestone,
   updateAdminProjectBlocker,
   listAdminProjectFiles,
+  downloadAdminProjectFile,
   removeAdminProjectFile,
   archiveAdminProjectRecord,
   restoreAdminProjectRecord,
@@ -32,6 +33,7 @@ router.patch('/:id/milestones/:milestoneId', requireRole('admin'), updateAdminPr
 router.delete('/:id/milestones/:milestoneId', requireRole('admin'), deleteAdminProjectMilestone)
 router.patch('/:id/milestones/:milestoneId/blockers/:blockerId', requireRole('admin'), updateAdminProjectBlocker)
 router.get('/:id/files', requireRole('admin'), listAdminProjectFiles)
+router.get('/:id/files/:fileId/download', requireRole('admin'), downloadAdminProjectFile)
 router.delete('/:id/files/:fileId', requireRole('admin'), removeAdminProjectFile)
 router.patch('/:id/archive', requireRole('admin'), archiveAdminProjectRecord)
 router.patch('/:id/restore', requireRole('admin'), restoreAdminProjectRecord)
