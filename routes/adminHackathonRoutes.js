@@ -15,9 +15,11 @@ const {
   createHackathonStage,
   listHackathonStages,
   updateHackathonStage,
+  deleteHackathonStage,
   createJudgingCriteria,
   listJudgingCriteria,
   updateJudgingCriteria,
+  deleteJudgingCriteria,
   createJudgeReview,
   listStageEvaluations,
   getTeamEvaluation,
@@ -49,9 +51,11 @@ router.patch('/:id/registrations/:registrationId/status', requireRole('admin'), 
 router.get('/:id/stages', requireRole('admin'), listHackathonStages)
 router.post('/:id/stages', requireRole('admin'), createHackathonStage)
 router.patch('/:id/stages/:stageId', requireRole('admin'), updateHackathonStage)
+router.delete('/:id/stages/:stageId', requireRole('admin'), deleteHackathonStage)
 router.get('/:id/stages/:stageId/criteria', requireRole('admin'), listJudgingCriteria)
 router.post('/:id/stages/:stageId/criteria', requireRole('admin'), createJudgingCriteria)
 router.patch('/:id/stages/:stageId/criteria/:criteriaId', requireRole('admin'), updateJudgingCriteria)
+router.delete('/:id/stages/:stageId/criteria/:criteriaId', requireRole('admin'), deleteJudgingCriteria)
 router.post('/:id/stages/:stageId/registrations/:registrationId/evaluations', requireRole('admin'), createJudgeReview)
 router.get('/:id/stages/:stageId/evaluations', requireRole('admin'), listStageEvaluations)
 router.get('/:id/stages/:stageId/registrations/:registrationId/evaluation', requireRole('admin'), getTeamEvaluation)

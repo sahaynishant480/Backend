@@ -21,6 +21,12 @@ const HackathonSchema = new mongoose.Schema({
     enum: ['private', 'college', 'public'],
     default: 'private',
     index: true
+  },
+  phase: {
+    type: String,
+    enum: ['REGISTRATIONS_OPEN', 'REGISTRATIONS_CLOSED', 'HACKATHON_OPEN', 'HACKATHON_CLOSED'],
+    default: 'REGISTRATIONS_OPEN',
+    index: true
   }
 }, { timestamps: true })
 

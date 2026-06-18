@@ -18,7 +18,7 @@ const toArray = (value) => Array.isArray(value)
     ? value.split(',').map((item) => item.trim()).filter(Boolean)
     : []
 const pickFields = (body = {}) => {
-  const allowed = ['title', 'description', 'organizer', 'startDate', 'endDate', 'rules', 'eligibility', 'themes', 'prizes', 'status', 'visibility']
+  const allowed = ['title', 'description', 'organizer', 'startDate', 'endDate', 'rules', 'eligibility', 'themes', 'prizes', 'status', 'visibility', 'phase']
   return allowed.reduce((acc, field) => {
     if (body[field] === undefined) return acc
     if ((field === 'startDate' || field === 'endDate') && body[field] === '') return acc
@@ -99,6 +99,7 @@ exports.createHackathon = async (req, res) => {
     if (!payload.title) return res.status(400).json({ message: 'Hackathon title is required' })
     if (!payload.status) payload.status = 'published'
     if (!payload.visibility) payload.visibility = 'public'
+    if (!payload.phase) payload.phase = 'REGISTRATIONS_OPEN'
     const hackathon = await Hackathon.create(payload)
     await logAdminAction({ adminUser: adminId(req), action: 'create_hackathon', targetType: 'hackathon', targetId: hackathon._id })
     res.status(201).json({ hackathon })
@@ -131,7 +132,7 @@ exports.getHackathonDetails = async (req, res) => {
 
 exports.approveHackathon = async (req, res) => {
   try {
-    const hackathon = await Hackathon.findByIdAndUpdate(req.params.id, { status: 'published', visibility: 'public' }, { new: true, runValidators: true })
+    const hackathon = await Hackathon.findByIdAndUpdate(req.params.id, { status: 'published', visibility: 'public', phase: 'REGISTRATIONS_OPEN' }, { new: true, runValidators: true })
     if (!hackathon) return res.status(404).json({ message: 'Hackathon not found' })
     await logAdminAction({ adminUser: adminId(req), action: 'approve_hackathon', targetType: 'hackathon', targetId: hackathon._id })
     res.json({ hackathon })
@@ -271,6 +272,22 @@ exports.updateHackathonStage = async (req, res) => {
   }
 }
 
+exports.deleteHackathonStage = async (req, res) => {
+  try {
+    const stage = await HackathonStage.findOneAndDelete({ _id: req.params.stageId, hackathon: req.params.id })
+    if (!stage) return res.status(404).json({ message: 'Stage not found' })
+    await Promise.all([
+      JudgingCriteria.deleteMany({ stage: stage._id }),
+      JudgeReview.deleteMany({ hackathon: req.params.id, stage: stage._id })
+    ])
+    await logAdminAction({ adminUser: adminId(req), action: 'delete_hackathon_stage', targetType: 'hackathon_stage', targetId: stage._id })
+    res.json({ message: 'Stage deleted' })
+  } catch (error) {
+    console.error('Delete hackathon stage error:', error)
+    res.status(500).json({ message: 'Failed to delete stage' })
+  }
+}
+
 exports.createJudgingCriteria = async (req, res) => {
   try {
     const criteria = await JudgingCriteria.create({ ...req.body, stage: req.params.stageId })
@@ -301,6 +318,19 @@ exports.updateJudgingCriteria = async (req, res) => {
   } catch (error) {
     console.error('Update judging criteria error:', error)
     res.status(500).json({ message: 'Failed to update criteria' })
+  }
+}
+
+exports.deleteJudgingCriteria = async (req, res) => {
+  try {
+    const criteria = await JudgingCriteria.findOneAndDelete({ _id: req.params.criteriaId, stage: req.params.stageId })
+    if (!criteria) return res.status(404).json({ message: 'Criteria not found' })
+    await JudgeReview.updateMany({ 'criteriaScores.criteria': criteria._id }, { $pull: { criteriaScores: { criteria: criteria._id } } })
+    await logAdminAction({ adminUser: adminId(req), action: 'delete_judging_criteria', targetType: 'judging_criteria', targetId: criteria._id })
+    res.json({ message: 'Criteria deleted' })
+  } catch (error) {
+    console.error('Delete judging criteria error:', error)
+    res.status(500).json({ message: 'Failed to delete criteria' })
   }
 }
 
