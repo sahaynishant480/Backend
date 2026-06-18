@@ -118,19 +118,27 @@ const createPdfBuffer = (title, sections = [], templateFile = '') => new Promise
   doc.end()
 })
 
+const drawTemplate = (doc, templateFile) => {
+  const templatePath = path.join(TEMPLATE_DIR, templateFile)
+  if (fs.existsSync(templatePath)) doc.image(templatePath, 0, 0, { fit: [595, 842] })
+}
+
 const createDesignedPdf = (templateFile, draw) => new Promise((resolve, reject) => {
   const doc = new PDFDocument({ size: 'A4', margin: 0 })
   const chunks = []
   doc.on('data', (chunk) => chunks.push(chunk))
   doc.on('end', () => resolve(Buffer.concat(chunks)))
   doc.on('error', reject)
-  const templatePath = path.join(TEMPLATE_DIR, templateFile)
-  if (fs.existsSync(templatePath)) doc.image(templatePath, 0, 0, { fit: [595, 842] })
+  drawTemplate(doc, templateFile)
   draw(doc)
   doc.end()
 })
 
 const clean = (value) => String(value || '').trim()
+const short = (value, max = 80) => {
+  const text = clean(value)
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text
+}
 const dateText = (value) => {
   const date = value ? new Date(value) : new Date()
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString('en-IN')
@@ -144,6 +152,36 @@ const clearBox = (doc, x, y, w, h) => {
 }
 const valueField = (doc, value, x, y, w, opts = {}) => {
   field(doc, value, x, y, w, opts)
+}
+
+const writePagedText = (doc, templateFile, text, x, y, width, bottom, opts = {}) => {
+  const content = clean(text)
+  if (!content) return y + (opts.emptyGap || 38)
+  const size = opts.size || 10
+  const lineHeight = opts.lineHeight || size + 5
+  doc.font(opts.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(size).fillColor(opts.color || '#374151')
+  let line = ''
+  const writeLine = (value) => {
+    if (y + lineHeight > bottom) {
+      doc.addPage({ size: 'A4', margin: 0 })
+      drawTemplate(doc, templateFile)
+      y = opts.top || 132
+      doc.font(opts.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(size).fillColor(opts.color || '#374151')
+    }
+    doc.text(value, x, y, { width })
+    y += lineHeight
+  }
+  content.split(/\s+/).forEach((word) => {
+    const next = line ? `${line} ${word}` : word
+    if (doc.widthOfString(next) > width && line) {
+      writeLine(line)
+      line = word
+    } else {
+      line = next
+    }
+  })
+  if (line) writeLine(line)
+  return y + (opts.afterGap || 22)
 }
 
 const escapeXml = (value) => String(value || '')
@@ -191,20 +229,20 @@ const generateStartupIdentityCardPdf = (packet = {}) => createDesignedPdf('start
   const members = getTeamMembers(packet)
   const completed = packet.readinessSignals?.completedMilestones ?? ''
   const total = packet.readinessSignals?.totalMilestones ?? ''
-  valueField(doc, packet.summary?.startupName, 120, 150, 355, { size: 24, align: 'center', color: '#9ca3af', h: 36 })
-  valueField(doc, `"${packet.summary?.tagline || packet.summary?.elevatorPitch || ''}"`, 70, 198, 455, { size: 15, align: 'center', h: 32 })
-  valueField(doc, `— ${packet.summary?.category || ''} —`, 58, 328, 230, { size: 15, bold: true, align: 'center', h: 28 })
-  ;(packet.summary?.descriptorWords || []).slice(0, 3).forEach((word, i) => valueField(doc, word, 63 + i * 82, 422, 66, { size: 8, align: 'center', color: '#6b7280', h: 14 }))
-  valueField(doc, packet.readinessScore ? String(packet.readinessScore) : '', 385, 372, 80, { size: 24, bold: true, align: 'center', color: '#000', h: 28 })
-  valueField(doc, `— ${members.length} Members`, 58, 512, 230, { size: 16, bold: true, h: 28 })
-  valueField(doc, packet.stage?.label, 333, 512, 190, { size: 15, bold: true, h: 30 })
-  valueField(doc, dateText(packet.generatedAt), 50, 604, 230, { size: 17, bold: true, h: 28 })
-  valueField(doc, `${completed}/${total} completed`, 332, 604, 190, { size: 15, bold: true, h: 28 })
-  valueField(doc, packet.summary?.elevatorPitch || packet.summary?.whyThisMatters, 64, 710, 470, { size: 9, h: 66, lineGap: 3, color: '#4b5563' })
+  valueField(doc, short(packet.summary?.startupName, 34).toUpperCase(), 58, 134, 480, { size: 30, align: 'center', color: '#a3a3a3', h: 36 })
+  valueField(doc, `"${short(packet.summary?.tagline || packet.summary?.elevatorPitch, 82)}"`, 58, 173, 480, { size: 18, align: 'center', h: 28 })
+  valueField(doc, `— ${short(packet.summary?.category, 28)} —`, 58, 304, 210, { size: 17, bold: true, align: 'center', h: 24 })
+  ;(packet.summary?.descriptorWords || []).slice(0, 3).forEach((word, i) => valueField(doc, short(word, 10), 64 + i * 82, 394, 54, { size: 6, align: 'center', color: '#4b5563', h: 10 }))
+  valueField(doc, packet.readinessScore ? String(packet.readinessScore) : '', 386, 343, 84, { size: 30, bold: true, align: 'center', color: '#000', h: 34 })
+  valueField(doc, `— ${members.length} Members`, 58, 477, 210, { size: 17, bold: true, h: 24 })
+  valueField(doc, short(packet.stage?.label, 24), 335, 477, 185, { size: 16, bold: true, h: 24 })
+  valueField(doc, dateText(packet.generatedAt), 49, 560, 215, { size: 17, bold: true, h: 24 })
+  valueField(doc, `${completed}/${total} completed`, 320, 560, 205, { size: 17, bold: true, h: 24 })
+  valueField(doc, packet.summary?.elevatorPitch || packet.summary?.whyThisMatters, 64, 688, 470, { size: 8.5, h: 70, lineGap: 4, color: '#4b5563' })
 })
 
 const generateProblemStatementPdf = (packet = {}) => createDesignedPdf('problem_statement.png', (doc) => {
-  valueField(doc, packet.summary?.startupName, 338, 75, 190, { size: 12, align: 'center', color: '#4b5563', h: 18 })
+  valueField(doc, short(packet.summary?.startupName, 28).toUpperCase(), 338, 75, 190, { size: 10, align: 'center', color: '#4b5563', h: 18 })
   const rows = [
     ['What problem are you solving?', packet.summary?.problemStatement],
     ['Who faces this problem?', packet.summary?.targetUsers],
@@ -212,34 +250,42 @@ const generateProblemStatementPdf = (packet = {}) => createDesignedPdf('problem_
     ['What makes your idea different?', packet.summary?.elevatorPitch],
     ['What changed after feedback?', packet.validationReport?.questions?.find((q) => /changed/i.test(q.question))?.answer]
   ]
-  let y = 150
+  let y = 132
   rows.forEach(([q, a], i) => {
-    field(doc, `${i + 1}. ${q}`, 52, y, 490, { size: 12, bold: true, h: 18 })
-    field(doc, a || '', 65, y + 25, 465, { size: 10, h: 62, lineGap: 3, color: '#374151' })
-    y += 120
+    if (y > 742) {
+      doc.addPage({ size: 'A4', margin: 0 })
+      drawTemplate(doc, 'problem_statement.png')
+      valueField(doc, short(packet.summary?.startupName, 28).toUpperCase(), 338, 75, 190, { size: 10, align: 'center', color: '#4b5563', h: 18 })
+      y = 132
+    }
+    field(doc, `${i + 1}. ${q}`, 52, y, 490, { size: 11, bold: true, h: 18 })
+    y = writePagedText(doc, 'problem_statement.png', a || '', 65, y + 25, 465, 775, { size: 10, lineHeight: 15, top: 132, afterGap: 28, emptyGap: 42 })
   })
 })
 
 const generateTeamRosterPdf = (packet = {}) => createDesignedPdf('team_roster.png', (doc) => {
-  valueField(doc, packet.summary?.startupName, 338, 78, 190, { size: 12, align: 'center', color: '#4b5563', h: 18 })
-  getTeamMembers(packet).slice(0, 12).forEach((member, i) => {
-    const y = 222 + i * 30
+  valueField(doc, short(packet.summary?.startupName, 28).toUpperCase(), 338, 78, 190, { size: 10, align: 'center', color: '#4b5563', h: 18 })
+  getTeamMembers(packet).slice(0, 18).forEach((member, i) => {
+    const y = 222 + i * 28
     field(doc, String(i + 1), 48, y, 35, { size: 10 })
-    field(doc, member.name, 92, y, 180, { size: 10 })
-    field(doc, member.role || 'Team Member', 290, y, 95, { size: 10 })
-    field(doc, member.email, 397, y, 145, { size: 9 })
+    field(doc, short(member.name, 30), 92, y, 175, { size: 10 })
+    field(doc, short(member.role || 'Team Member', 18), 284, y, 82, { size: 10 })
+    field(doc, short(member.email, 30), 384, y, 155, { size: 9 })
   })
 })
 
 const generateIncubationApplicationPdf = (packet = {}) => createDesignedPdf('incubation_application_cover.png', (doc) => {
-valueField(doc, packet.summary?.startupName, 40, 140, 515, { size: 28, align: 'center', color: '#9ca3af', h: 40 })
-valueField(doc, `"${packet.summary?.tagline || packet.summary?.elevatorPitch || ''}"`, 55, 198, 485, { size: 17, align: 'center', h: 30 })
-valueField(doc, packet.summary?.category, 70, 335, 90, { size: 10, align: 'center', h: 18 })
-valueField(doc, packet.stage?.label, 203, 335, 100, { size: 10, align: 'center', h: 18 })
-valueField(doc, `${packet.readinessScore || ''}/100`, 336, 335, 95, { size: 10, align: 'center', h: 18 })
-valueField(doc, dateText(packet.generatedAt), 459, 335, 78, { size: 10, align: 'center', h: 18 })
-valueField(doc, packet.summary?.founderName || packet.teamDetails?.founder?.name, 58, 450, 225, { size: 18, bold: true, h: 26 })
-valueField(doc, packet.teamDetails?.founder?.role || 'Startup Lead', 58, 485, 225, { size: 10, color: '#6b7280', h: 18 })
+  const founder = packet.teamDetails?.founder || {}
+  valueField(doc, short(packet.summary?.startupName, 36).toUpperCase(), 38, 153, 520, { size: 29, align: 'center', color: '#a3a3a3', h: 36 })
+  valueField(doc, `"${short(packet.summary?.tagline || packet.summary?.elevatorPitch, 86)}"`, 48, 201, 500, { size: 18, align: 'center', h: 28 })
+  valueField(doc, short(packet.summary?.category, 18), 76, 340, 80, { size: 9, align: 'center', h: 16 })
+  valueField(doc, short(packet.stage?.label, 18), 204, 340, 80, { size: 9, align: 'center', h: 16 })
+  valueField(doc, `${packet.readinessScore || ''}/100`, 334, 340, 75, { size: 9, align: 'center', h: 16 })
+  valueField(doc, dateText(packet.generatedAt), 458, 340, 80, { size: 9, align: 'center', h: 16 })
+  valueField(doc, short(packet.summary?.founderName || founder.name, 24), 57, 445, 215, { size: 17, bold: true, h: 24 })
+  valueField(doc, short(founder.role || 'Startup Lead', 35), 57, 475, 215, { size: 7.5, color: '#4b5563', h: 12 })
+  valueField(doc, short(founder.collegeName || packet.summary?.collegeName || '', 28), 315, 445, 215, { size: 17, bold: true, h: 24 })
+  valueField(doc, short(founder.course || packet.summary?.course || '', 35), 315, 475, 215, { size: 7.5, color: '#4b5563', h: 12 })
 })
 
 const createStartupPackageZip = async (packet = {}) => {

@@ -411,7 +411,9 @@ const buildIncubationPacket = ({ project, milestones = [], logs = [] }) => {
       descriptorWords: foundation.descriptorWords || project.tags || [],
       founderInspiration: purpose.founderInspiration || '',
       founderName: project.owner?.name || '',
-      founderEmail: project.owner?.email || ''
+      founderEmail: project.owner?.email || '',
+      collegeName: project.owner?.college?.name || project.college?.name || '',
+      course: project.owner?.course || ''
     },
     planning: {
       goals: project.executionPlan || mvp.roadmap || '',
@@ -424,7 +426,9 @@ const buildIncubationPacket = ({ project, milestones = [], logs = [] }) => {
       founder: {
         name: project.owner?.name || '',
         email: project.owner?.email || '',
-        role: 'Startup Lead'
+        role: 'Startup Lead',
+        collegeName: project.owner?.college?.name || project.college?.name || '',
+        course: project.owner?.course || ''
       },
 
       members: members.map((member) => ({
@@ -2538,8 +2542,9 @@ exports.getIncubationPacket = async (req, res) => {
     const { id } = req.params
     const requesterId = req.user?.userId
     const project = await Project.findById(id)
-      .populate('owner', 'name email')
+      .populate({ path: 'owner', select: 'name email college course', populate: { path: 'college', select: 'name' } })
       .populate('teamMembers', 'name email')
+      .populate('college', 'name')
       .lean()
 
     if (!project) {
@@ -2576,8 +2581,9 @@ exports.downloadStartupPackage = async (req, res) => {
     const { id } = req.params
     const requesterId = req.user?.userId
     const project = await Project.findById(id)
-      .populate('owner', 'name email')
+      .populate({ path: 'owner', select: 'name email college course', populate: { path: 'college', select: 'name' } })
       .populate('teamMembers', 'name email')
+      .populate('college', 'name')
       .lean()
 
     if (!project) {
