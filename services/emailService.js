@@ -57,7 +57,7 @@ const sendViaResend = async ({ to, subject, text, html, attachments }) => {
     throw new Error('RESEND_API_KEY must be set when EMAIL_PROVIDER=resend')
   }
 
-  const fromAddress = process.env.EMAIL_FROM || 'noreply@joincollab.org'
+  const fromAddress = process.env.EMAIL_FROM || 'COLLAB <noreply@joincollab.org>'
   if (!fromAddress) {
     throw new Error('EMAIL_FROM must be set for Resend')
   }
