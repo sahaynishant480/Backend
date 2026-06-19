@@ -245,7 +245,7 @@ const mapNodemailerAttachments = (attachments = []) => {
 
 exports.sendEmail = async ({ to, subject, text, html, attachments }) => {
   try {
-    const provider = (process.env.EMAIL_PROVIDER || (process.env.RESEND_API_KEY ? 'resend' : '')).toLowerCase().trim()
+    const provider = (process.env.RESEND_API_KEY ? 'resend' : process.env.EMAIL_PROVIDER || '').toLowerCase().trim()
     if (provider === 'brevo') {
       return await sendViaBrevo({ to, subject, text, html, attachments })
     }
