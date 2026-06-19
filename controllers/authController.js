@@ -52,7 +52,7 @@ const buildVerifyLink = (email) => {
 }
 
 const getGoogleClientId = () => process.env.GOOGLE_CLIENT_ID?.trim()
-const isEmailVerificationEnabled = () => process.env.EMAIL_VERIFICATION_ENABLED === 'true'
+const isEmailVerificationEnabled = () => process.env.EMAIL_VERIFICATION_ENABLED !== 'false'
 
 const clearEmailVerificationFields = (user) => {
   user.emailVerified = true

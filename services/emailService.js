@@ -57,7 +57,7 @@ const sendViaResend = async ({ to, subject, text, html, attachments }) => {
     throw new Error('RESEND_API_KEY must be set when EMAIL_PROVIDER=resend')
   }
 
-  const fromAddress = process.env.EMAIL_FROM || process.env.EMAIL_USER
+  const fromAddress = process.env.EMAIL_FROM || 'noreply@joincollab.org'
   if (!fromAddress) {
     throw new Error('EMAIL_FROM must be set for Resend')
   }
@@ -245,7 +245,7 @@ const mapNodemailerAttachments = (attachments = []) => {
 
 exports.sendEmail = async ({ to, subject, text, html, attachments }) => {
   try {
-    const provider = (process.env.EMAIL_PROVIDER || '').toLowerCase().trim()
+    const provider = (process.env.EMAIL_PROVIDER || (process.env.RESEND_API_KEY ? 'resend' : '')).toLowerCase().trim()
     if (provider === 'brevo') {
       return await sendViaBrevo({ to, subject, text, html, attachments })
     }
@@ -257,7 +257,7 @@ exports.sendEmail = async ({ to, subject, text, html, attachments }) => {
     }
 
     const transporter = await getTransporter()
-    const fromAddress = process.env.EMAIL_FROM || process.env.EMAIL_USER
+    const fromAddress = process.env.EMAIL_FROM || process.env.EMAIL_USER || 'noreply@joincollab.org'
 
     const sendPromise = transporter.sendMail({
       from: `Collab <${fromAddress}>`,
