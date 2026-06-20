@@ -105,20 +105,23 @@ exports.deleteMilestoneFeedPost = async (req, res) => {
   try {
     const projectId = sanitizeText(req.body.projectId, 80)
     const milestoneId = sanitizeText(req.body.milestoneId, 80)
+    const milestoneTitle = sanitizeText(req.body.milestoneTitle, 300)
     if (!projectId || !milestoneId) return res.status(400).json({ message: 'Project and milestone are required' })
 
-    const project = await Project.findById(projectId).select('owner teamMembers')
+    const project = await Project.findById(projectId).select('title owner teamMembers')
     if (!project) return res.status(404).json({ message: 'Project not found' })
 
     const userId = String(req.user.userId)
     const isMember = String(project.owner) === userId || (project.teamMembers || []).some((id) => String(id) === userId)
     if (!isMember && req.user.role !== 'admin') return res.status(403).json({ message: 'Not allowed' })
 
+    const fallbackContent = milestoneTitle ? `Achieved milestone: ${milestoneTitle}` : ''
     await FeedPost.deleteMany({
       type: 'milestone',
-      'source.type': 'milestone',
-      'source.projectId': projectId,
-      'source.milestoneId': milestoneId
+      $or: [
+        { 'source.type': 'milestone', 'source.projectId': projectId, 'source.milestoneId': milestoneId },
+        ...(fallbackContent ? [{ projectTitle: project.title, content: fallbackContent }] : [])
+      ]
     })
     res.json({ message: 'Milestone activity removed' })
   } catch (error) {
