@@ -61,6 +61,13 @@ const ProjectSchema = new mongoose.Schema({
     fingerprintVersion: { type: Number, default: 1 },
     fingerprintedAt: { type: Date }
   },
+  startupCreationRecord: {
+    projectName: { type: String, default: '' },
+    owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    createdAt: { type: Date },
+    projectId: { type: String, default: '' },
+    verificationHash: { type: String, default: '' }
+  },
   
   // Venture Lifecycle
   lifecycleStage: {

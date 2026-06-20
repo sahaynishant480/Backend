@@ -5,6 +5,7 @@ const Project = require('../models/Project')
 const Milestone = require('../models/Milestone')
 const User = require('../models/User')
 const { logAdminAction } = require('../services/adminActionLogger')
+const { logProjectAccess } = require('../services/projectAccessLogger')
 
 const isObjectId = (value) => mongoose.Types.ObjectId.isValid(value)
 const adminId = (req) => req.user?._id || req.user?.userId
@@ -45,6 +46,13 @@ exports.getAdminProjectDetails = async (req, res) => {
       .lean()
 
     if (!project) return res.status(404).json({ message: 'Project not found' })
+
+    await logProjectAccess({
+      projectId: id,
+      userId: adminId(req),
+      accessType: 'admin_access',
+      metadata: { source: 'admin_project_records' }
+    })
 
     const milestones = await Milestone.find({ projectId: id })
       .select('title description owner lifecycleStage dueDate status priority blockers blockerDetails completedAt createdAt updatedAt')

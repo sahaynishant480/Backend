@@ -36,6 +36,10 @@ const {
   getIncubationPacket,
   downloadStartupPackage,
   downloadCertificatesZip,
+  downloadStartupCreationRecord,
+  downloadVentureProvenanceReport,
+  getProjectAccessHistory,
+  recordProjectAccess,
   applyContinuationAction
 } = require('../controllers/projectController')
 const validate = require('../middleware/validate')
@@ -114,6 +118,16 @@ router.patch('/:id/team-checkin', validate(z.object({ params: z.object({ id: obj
 router.get('/:id/continuation', validate(z.object({ params: z.object({ id: objectId }) })), requireTeamMember, getContinuationPlan)
 router.post('/:id/continuation', validate(z.object({ params: z.object({ id: objectId }), body: checkIn.continuationBody })), requireTeamMember, applyContinuationAction)
 router.get('/:id/incubation-packet', validate(z.object({ params: z.object({ id: objectId }) })), requireTeamMember, getIncubationPacket)
+router.get('/:id/access-history', validate(z.object({ params: z.object({ id: objectId }) })), getProjectAccessHistory)
+router.post('/:id/access-log', validate(z.object({
+  params: z.object({ id: objectId }),
+  body: z.object({
+    accessType: z.enum(['project_view', 'validation_view', 'package_download', 'admin_access']),
+    metadata: z.object({}).passthrough().optional()
+  }).passthrough()
+})), recordProjectAccess)
+router.get('/:id/creation-record.pdf', validate(z.object({ params: z.object({ id: objectId }) })), requireTeamMember, downloadStartupCreationRecord)
+router.get('/:id/provenance-report.pdf', validate(z.object({ params: z.object({ id: objectId }) })), requireTeamMember, downloadVentureProvenanceReport)
 router.get('/:id/startup-package.zip', validate(z.object({ params: z.object({ id: objectId }) })), requireTeamMember, downloadStartupPackage)
 router.get('/:id/certificates.zip', validate(z.object({ params: z.object({ id: objectId }) })), requireTeamMember, downloadCertificatesZip)
 

@@ -1,16 +1,19 @@
 const fs = require('fs')
 const path = require('path')
 const crypto = require('crypto')
+const PDFDocument = require('pdfkit')
 const mongoose = require('mongoose')
 const Project = require('../models/Project')
 const Milestone = require('../models/Milestone')
 const ContributionLog = require('../models/ContributionLog')
+const ProjectAccessLog = require('../models/ProjectAccessLog')
 const User = require('../models/User')
 const { createNotification } = require('./notificationController')
 const { applyUserStats, POINTS, computeBadges } = require('../utils/points')
 const { sendEmail } = require('../services/emailService')
 const { generateValidationCertificates, generateProjectCertificates, buildVerificationUrl } = require('../services/certificateService')
 const { createStartupPackageZip, createZipBuffer } = require('../services/exportService')
+const { logProjectAccess, ACCESS_TYPES } = require('../services/projectAccessLogger')
 const { logSecurityEvent } = require('../middleware/securityLogger')
 const {
   normalizeLifecycleStage,
@@ -55,6 +58,43 @@ const createIdeaFingerprint = ({ title, shortPitch, description, executionPlan, 
     .join('|')
   return crypto.createHash('sha256').update(normalized).digest('hex')
 }
+
+const createStartupCreationHash = ({ projectName, ownerId, projectId, createdAt }) =>
+  crypto
+    .createHash('sha256')
+    .update([projectName, ownerId, projectId, createdAt].map((value) => String(value || '')).join('|'))
+    .digest('hex')
+
+const ensureStartupCreationRecord = (project) => {
+  if (!project) return null
+  const existing = project.startupCreationRecord
+  if (existing?.verificationHash) return existing
+  const createdAt = project.createdAt || new Date()
+  const ownerId = toId(project.owner?._id || project.owner)
+  const projectId = toId(project._id || project.id)
+  return {
+    projectName: project.title || '',
+    owner: ownerId,
+    createdAt,
+    projectId,
+    verificationHash: createStartupCreationHash({
+      projectName: project.title,
+      ownerId,
+      projectId,
+      createdAt
+    })
+  }
+}
+
+const createPdfBuffer = (draw) => new Promise((resolve, reject) => {
+  const doc = new PDFDocument({ margin: 48, size: 'A4' })
+  const chunks = []
+  doc.on('data', (chunk) => chunks.push(chunk))
+  doc.on('end', () => resolve(Buffer.concat(chunks)))
+  doc.on('error', reject)
+  draw(doc)
+  doc.end()
+})
 
 const createFileSignature = ({ projectId, fileId, userId, expiresAt }) =>
   crypto
@@ -617,35 +657,13 @@ const buildFounderRoleLabel = (ownerDoc = {}) => {
 }
 
 const sanitizeProjectForDiscover = (projectDoc, viewerId) => {
-  const project = sanitizeProjectForViewer(projectDoc, viewerId)
-  if (!project) return project
-
   const raw = projectDoc.toObject ? projectDoc.toObject({ virtuals: true }) : projectDoc
-  const ownerRaw = raw.owner
-  if (!ownerRaw || !project.owner) return project
-
-  const ownerId = toId(ownerRaw._id || ownerRaw)
-  const isOwner = viewerId && ownerId === viewerId
-  const isTeamMember = isViewerTeamMember(raw, viewerId)
-  const visibility = raw.visibility || project.visibility || 'private'
-  const isListedOnDiscover = visibility === 'global' || visibility === 'college'
-  const canShowContact =
-    Boolean(ownerRaw.showContactToTeam) || isOwner || isTeamMember || isListedOnDiscover
-  const email = canShowContact && ownerRaw.email ? ownerRaw.email : undefined
-  const phone = canShowContact && ownerRaw.phone ? ownerRaw.phone : undefined
-
-  project.owner = {
-    _id: project.owner._id || ownerId,
-    name: ownerRaw.name || project.owner.name || 'Founder',
-    founderRole: buildFounderRoleLabel(ownerRaw),
-    primaryCategory: ownerRaw.primaryCategory || '',
-    email,
-    phone,
-    showContactToTeam: Boolean(ownerRaw.showContactToTeam),
-    contactAvailable: Boolean(email || phone)
+  if (!raw) return null
+  return {
+    _id: raw._id,
+    title: raw.title || 'Untitled venture',
+    shortPitch: raw.shortPitch || String(raw.description || '').split('\n')[0].slice(0, 200)
   }
-
-  return project
 }
 
 const maybeApplyInactivityPenalty = async (project) => {
@@ -767,6 +785,20 @@ exports.createProject = async (req, res) => {
       marketingContent: category === 'Marketing & Content' ? marketingContent : undefined,
       servicesOperations: category === 'Services & Operations' ? servicesOperations : undefined
     })
+
+    const creationRecordDate = new Date()
+    project.startupCreationRecord = {
+      projectName: project.title,
+      owner: userId,
+      createdAt: creationRecordDate,
+      projectId: project._id.toString(),
+      verificationHash: createStartupCreationHash({
+        projectName: project.title,
+        ownerId: userId,
+        projectId: project._id,
+        createdAt: creationRecordDate
+      })
+    }
 
     await project.save()
 
@@ -930,6 +962,20 @@ exports.getProjectById = async (req, res) => {
 
     if (isTeamMember) {
       await maybeApplyInactivityPenalty(project)
+    }
+
+    if (!project.startupCreationRecord?.verificationHash) {
+      project.startupCreationRecord = ensureStartupCreationRecord(project)
+      await project.save()
+    }
+
+    if (req.query?.audit === 'project_view' && isTeamMember) {
+      await logProjectAccess({
+        project,
+        userId: viewerId,
+        accessType: 'project_view',
+        metadata: { source: 'workspace' }
+      })
     }
 
     const sanitized = sanitizeProjectForViewer(project, viewerId)
@@ -2576,6 +2622,131 @@ exports.getIncubationPacket = async (req, res) => {
   }
 }
 
+exports.recordProjectAccess = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { accessType, metadata } = req.body
+    const requesterId = req.user?.userId
+    if (!ACCESS_TYPES.has(accessType)) return res.status(400).json({ message: 'Invalid access type' })
+
+    const project = await Project.findById(id).select('owner teamMembers')
+    if (!project) return res.status(404).json({ message: 'Startup workspace not found' })
+
+    const requesterIdString = requesterId?.toString()
+    const allowed = req.user?.role === 'admin'
+      || toId(project.owner) === requesterIdString
+      || isViewerTeamMember(project, requesterIdString)
+    if (!allowed) return res.status(403).json({ message: 'Not allowed' })
+
+    await logProjectAccess({ project, userId: requesterId, accessType, metadata })
+    res.json({ message: 'Access recorded' })
+  } catch (error) {
+    console.error('Record project access error:', error)
+    res.status(500).json({ message: 'Failed to record access' })
+  }
+}
+
+exports.getProjectAccessHistory = async (req, res) => {
+  try {
+    const { id } = req.params
+    const requesterId = req.user?.userId?.toString()
+    const project = await Project.findById(id).select('owner')
+    if (!project) return res.status(404).json({ message: 'Startup workspace not found' })
+
+    const canView = req.user?.role === 'admin' || toId(project.owner) === requesterId
+    if (!canView) return res.status(403).json({ message: 'Only the owner or admin can view access history' })
+
+    const logs = await ProjectAccessLog.find({ project: id })
+      .populate('user', 'name email role')
+      .sort({ timestamp: -1 })
+      .limit(50)
+      .lean()
+    res.json({ logs })
+  } catch (error) {
+    console.error('Project access history error:', error)
+    res.status(500).json({ message: 'Failed to load access history' })
+  }
+}
+
+exports.downloadStartupCreationRecord = async (req, res) => {
+  try {
+    const { id } = req.params
+    const project = await Project.findById(id)
+      .populate('owner', 'name email')
+    if (!project) return res.status(404).json({ message: 'Startup workspace not found' })
+    const record = ensureStartupCreationRecord(project)
+    if (!project.startupCreationRecord?.verificationHash) {
+      project.startupCreationRecord = record
+      await project.save()
+    }
+    const buffer = await createPdfBuffer((doc) => {
+      doc.fontSize(20).text('Startup Creation Record')
+      doc.moveDown()
+      doc.fontSize(11)
+      doc.text(`Startup Name: ${record.projectName || project.title}`)
+      doc.text(`Founder: ${project.owner?.name || 'Founder'} (${project.owner?.email || 'email unavailable'})`)
+      doc.text(`Creation Date: ${new Date(record.createdAt).toLocaleString('en-IN')}`)
+      doc.text(`Project ID: ${record.projectId}`)
+      doc.moveDown()
+      doc.text('Verification Hash:')
+      doc.font('Courier').fontSize(9).text(record.verificationHash, { width: 500 })
+      doc.font('Helvetica').fontSize(10).moveDown()
+      doc.text('This record documents the timestamped creation of this startup workspace inside COLLAB.')
+    })
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', 'attachment; filename="startup_creation_record.pdf"')
+    res.send(buffer)
+  } catch (error) {
+    console.error('Startup creation record error:', error)
+    res.status(500).json({ message: 'Failed to generate creation record' })
+  }
+}
+
+exports.downloadVentureProvenanceReport = async (req, res) => {
+  try {
+    const { id } = req.params
+    const requesterId = req.user?.userId
+    const project = await Project.findById(id)
+      .populate('owner', 'name email')
+      .populate('teamMembers', 'name email')
+      .lean()
+    if (!project) return res.status(404).json({ message: 'Startup workspace not found' })
+
+    const [milestones, logs] = await Promise.all([
+      Milestone.find({ projectId: id }).lean(),
+      ContributionLog.find({ projectId: id }).lean()
+    ])
+    const completed = milestones.filter((item) => item.status === 'completed').length
+    const validationEntries = project.validation?.workspace?.evidence?.length || 0
+    const uploadedEvidence = (project.validation?.sharedFiles || []).length
+    await logProjectAccess({ projectId: id, userId: requesterId, accessType: 'package_download', metadata: { artifact: 'venture_provenance_report' } })
+
+    const buffer = await createPdfBuffer((doc) => {
+      doc.fontSize(20).text('Venture Provenance Report')
+      doc.moveDown()
+      doc.fontSize(11)
+      doc.text(`Startup Name: ${project.title}`)
+      doc.text(`Founder: ${project.owner?.name || 'Founder'}`)
+      doc.text(`Team Members: ${(project.teamMembers || []).map((m) => m.name).filter(Boolean).join(', ') || 'Founder only'}`)
+      doc.text(`Creation Date: ${new Date(project.createdAt).toLocaleDateString('en-IN')}`)
+      doc.text(`Current Startup Stage: ${getLifecycleLabel(project.lifecycleStage)}`)
+      doc.text(`Readiness Score: ${project.readinessScore || 0}/100`)
+      doc.moveDown()
+      doc.text(`Milestones Count: ${milestones.length}`)
+      doc.text(`Completed Milestones: ${completed}`)
+      doc.text(`Validation Entries: ${validationEntries}`)
+      doc.text(`Uploaded Evidence Count: ${uploadedEvidence}`)
+      doc.text(`Execution Activity Logs: ${logs.length}`)
+    })
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', 'attachment; filename="venture_provenance_report.pdf"')
+    res.send(buffer)
+  } catch (error) {
+    console.error('Venture provenance report error:', error)
+    res.status(500).json({ message: 'Failed to generate provenance report' })
+  }
+}
+
 exports.downloadStartupPackage = async (req, res) => {
   try {
     const { id } = req.params
@@ -2608,6 +2779,7 @@ exports.downloadStartupPackage = async (req, res) => {
 
     const packet = buildIncubationPacket({ project, milestones, logs })
     const zip = await createStartupPackageZip(packet)
+    await logProjectAccess({ projectId: id, userId: requesterId, accessType: 'package_download', metadata: { artifact: 'startup_package' } })
     const safeTitle = String(project.title || 'startup').replace(/[^a-z0-9-_]+/gi, '_').slice(0, 80)
 
     res.setHeader('Content-Type', 'application/zip')
