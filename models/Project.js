@@ -207,7 +207,10 @@ const ProjectSchema = new mongoose.Schema({
     },
 
     readiness: {
-      notes: { type: String, default: '' }
+      notes: { type: String, default: '' },
+      fundingAvailable: { type: String, default: '' },
+      technicalResources: { type: String, default: '' },
+      existingAssets: { type: String, default: '' }
     },
 
     mvp: {
