@@ -27,6 +27,11 @@ const FeedPostSchema = new mongoose.Schema({
   author: AuthorSnapshotSchema,
   venture: { type: String, default: '' },
   projectTitle: { type: String, default: '' },
+  source: {
+    type: { type: String, default: '' },
+    projectId: { type: String, default: '' },
+    milestoneId: { type: String, default: '' }
+  },
   content: { type: String, required: true, maxlength: 2000 },
   media: { type: String, default: null },
   likedBy: [{ type: String }],

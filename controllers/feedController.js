@@ -1,5 +1,6 @@
 const FeedPost = require('../models/FeedPost')
 const User = require('../models/User')
+const Project = require('../models/Project')
 
 const sanitizeText = (value, max = 2000) => (
   typeof value === 'string' ? value.trim().slice(0, max) : ''
@@ -28,6 +29,7 @@ const serializePost = (post) => {
     author: post.author,
     venture: post.venture,
     projectTitle: post.projectTitle,
+    source: post.source || {},
     content: post.content,
     media: post.media || null,
     createdAt: post.createdAt,
@@ -66,6 +68,11 @@ exports.createFeedPost = async (req, res) => {
     const venture = sanitizeText(req.body.venture || req.body.projectTitle, 160)
     const projectTitle = sanitizeText(req.body.projectTitle || venture, 160)
     const media = typeof req.body.media === 'string' ? req.body.media : null
+    const source = req.body.source && typeof req.body.source === 'object' ? {
+      type: sanitizeText(req.body.source.type, 40),
+      projectId: sanitizeText(req.body.source.projectId, 80),
+      milestoneId: sanitizeText(req.body.source.milestoneId, 80)
+    } : undefined
 
     if (!['milestone', 'blocker'].includes(type)) {
       return res.status(400).json({ message: 'Post type must be milestone or blocker' })
@@ -82,6 +89,7 @@ exports.createFeedPost = async (req, res) => {
       author,
       venture,
       projectTitle,
+      ...(source ? { source } : {}),
       content,
       media
     })
@@ -90,6 +98,32 @@ exports.createFeedPost = async (req, res) => {
   } catch (error) {
     console.error('Create feed post error:', error)
     res.status(500).json({ message: 'Failed to create feed post' })
+  }
+}
+
+exports.deleteMilestoneFeedPost = async (req, res) => {
+  try {
+    const projectId = sanitizeText(req.body.projectId, 80)
+    const milestoneId = sanitizeText(req.body.milestoneId, 80)
+    if (!projectId || !milestoneId) return res.status(400).json({ message: 'Project and milestone are required' })
+
+    const project = await Project.findById(projectId).select('owner teamMembers')
+    if (!project) return res.status(404).json({ message: 'Project not found' })
+
+    const userId = String(req.user.userId)
+    const isMember = String(project.owner) === userId || (project.teamMembers || []).some((id) => String(id) === userId)
+    if (!isMember && req.user.role !== 'admin') return res.status(403).json({ message: 'Not allowed' })
+
+    await FeedPost.deleteMany({
+      type: 'milestone',
+      'source.type': 'milestone',
+      'source.projectId': projectId,
+      'source.milestoneId': milestoneId
+    })
+    res.json({ message: 'Milestone activity removed' })
+  } catch (error) {
+    console.error('Delete milestone feed post error:', error)
+    res.status(500).json({ message: 'Failed to remove milestone activity' })
   }
 }
 
