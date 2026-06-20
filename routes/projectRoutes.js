@@ -9,6 +9,8 @@ const {
   getProjects,
   getProjectById,
   addTeamMember,
+  applyToProjectTeam,
+  respondToTeamApplication,
   removeTeamMember,
   addProjectMessage,
   deleteProject,
@@ -133,6 +135,8 @@ router.get('/:id/certificates.zip', validate(z.object({ params: z.object({ id: o
 
 // Team Management
 router.post('/:id/add-member', validate(z.object({ params: z.object({ id: objectId }), body: project.addMemberBody })), requireProjectOwner, addTeamMember)
+router.post('/:id/apply-teammate', validate(z.object({ params: z.object({ id: objectId }), body: project.teammateApplicationBody })), applyToProjectTeam)
+router.post('/:id/team-applications/:applicationId/respond', validate(z.object({ params: z.object({ id: objectId, applicationId: objectId }), body: project.teammateApplicationDecisionBody })), requireProjectOwner, respondToTeamApplication)
 router.post('/:id/remove-member', validate(z.object({ params: z.object({ id: objectId }), body: project.removeMemberBody })), requireProjectOwner, removeTeamMember)
 router.post('/:id/messages', validate(z.object({ params: z.object({ id: objectId }), body: project.messageBody })), requireTeamMember, addProjectMessage)
 router.post('/:id/files', validate(z.object({ params: z.object({ id: objectId }) })), requireTeamMember, upload.single('file'), addProjectFile)

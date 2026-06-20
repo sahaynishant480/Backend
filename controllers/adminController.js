@@ -5,6 +5,8 @@ const Project = require('../models/Project')
 const Milestone = require('../models/Milestone')
 const ContributionLog = require('../models/ContributionLog')
 const User = require('../models/User')
+const AdminActionLog = require('../models/AdminActionLog')
+const ProjectAccessLog = require('../models/ProjectAccessLog')
 const { logAdminAction } = require('../services/adminActionLogger')
 
 const uploadsDir = path.join(__dirname, '..', 'uploads')
@@ -20,6 +22,23 @@ const log = (req, action, targetType, targetId, details = {}) =>
   logAdminAction({ adminUser: adminId(req), action, targetType, targetId, details })
 
 exports.adminStats = (req, res) => res.status(501).send('Not implemented')
+
+exports.getAdminLogs = async (req, res) => {
+  const [adminLogs, projectAccessLogs] = await Promise.all([
+    AdminActionLog.find({})
+      .populate('adminUser', 'name email role')
+      .sort({ timestamp: -1 })
+      .limit(100)
+      .lean(),
+    ProjectAccessLog.find({})
+      .populate('project', 'title')
+      .populate('user', 'name email role')
+      .sort({ timestamp: -1 })
+      .limit(100)
+      .lean()
+  ])
+  res.json({ adminLogs, projectAccessLogs })
+}
 
 exports.getAdminProjects = async (req, res) => {
   const projects = await Project.find({})

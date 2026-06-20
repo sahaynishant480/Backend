@@ -193,7 +193,8 @@ const updateProjectRequirementsBody = z.object({
   rolesNeeded: z.union([z.array(z.string()), z.string()]).optional(),
   skillsRequired: z.union([z.array(z.string()), z.string()]).optional(),
   numberOfTeammates: z.union([z.number(), z.string()]).optional(),
-  visibility: optionalString
+  visibility: optionalString,
+  lookingForTeammates: z.union([z.boolean(), z.string()]).optional()
 }).passthrough()
 
 const joinRequestBody = z.object({
@@ -208,6 +209,14 @@ const respondRequestBody = z.object({
 const addMemberBody = z.object({
   requesterId: optionalId,
   userId: objectId
+}).passthrough()
+
+const teammateApplicationBody = z.object({
+  role: z.string().min(1).max(120)
+}).passthrough()
+
+const teammateApplicationDecisionBody = z.object({
+  action: z.enum(['accept', 'reject'])
 }).passthrough()
 
 const removeMemberBody = z.object({
@@ -388,6 +397,8 @@ module.exports = {
     joinRequestBody,
     respondRequestBody,
     addMemberBody,
+    teammateApplicationBody,
+    teammateApplicationDecisionBody,
     removeMemberBody,
     messageBody,
     validationSubmitBody,

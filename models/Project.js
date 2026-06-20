@@ -15,6 +15,14 @@ const ProjectSchema = new mongoose.Schema({
   rolesNeeded: [{ type: String }],
   skillsRequired: [{ type: String }],
   numberOfTeammates: { type: Number, required: true, min: 1, max: 10 },
+  lookingForTeammates: { type: Boolean, default: false, index: true },
+  teamApplications: [{
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    role: { type: String, default: '' },
+    status: { type: String, enum: ['pending', 'accepted', 'rejected'], default: 'pending' },
+    createdAt: { type: Date, default: Date.now },
+    decidedAt: { type: Date }
+  }],
   visibility: { 
     type: String, 
     required: true,

@@ -2,6 +2,7 @@ const express = require('express')
 const router = express.Router()
 const {
   adminStats,
+  getAdminLogs,
   getAdminProjects,
   getAdminProjectDetails,
   updateAdminProject,
@@ -20,6 +21,7 @@ const { requireRole } = require('../middleware/rbac')
 const { emptyBody } = require('../validators')
 
 router.get('/stats', requireRole('admin'), validate(emptyBody), adminStats)
+router.get('/logs', requireRole('admin'), getAdminLogs)
 router.get('/projects', requireRole('admin'), getAdminProjects)
 router.get('/projects/:id', requireRole('admin'), getAdminProjectDetails)
 router.patch('/projects/:id', requireRole('admin'), updateAdminProject)

@@ -592,6 +592,7 @@ const sanitizeProjectForViewer = (projectDoc, viewerId) => {
 
   if (!isOwner) {
     project.interestedUsers = []
+    project.teamApplications = []
     project.security = undefined
   }
 
@@ -662,7 +663,8 @@ const sanitizeProjectForDiscover = (projectDoc, viewerId) => {
   return {
     _id: raw._id,
     title: raw.title || 'Untitled venture',
-    shortPitch: raw.shortPitch || String(raw.description || '').split('\n')[0].slice(0, 200)
+    shortPitch: raw.shortPitch || String(raw.description || '').split('\n')[0].slice(0, 200),
+    lookingForTeammates: Boolean(raw.lookingForTeammates)
   }
 }
 
@@ -706,6 +708,7 @@ exports.createProject = async (req, res) => {
       skillsRequired,
       numberOfTeammates,
       visibility,
+      lookingForTeammates,
       executionPlan,
       techProduct,
       businessStartup,
@@ -750,6 +753,7 @@ exports.createProject = async (req, res) => {
       skillsRequired: normalizedSkills,
       numberOfTeammates: Math.min(10, Math.max(1, parseInt(numberOfTeammates, 10) || 1)),
       visibility: normalizedVisibility,
+      lookingForTeammates: lookingForTeammates === true || lookingForTeammates === 'true',
       college: owner?.college || owner?.college_id || undefined,
       executionPlan: normalizedExecutionPlan,
       security: {
@@ -936,6 +940,7 @@ exports.getProjectById = async (req, res) => {
       .populate('owner', 'name email phone lastActive')
       .populate('teamMembers', 'name email phone lastActive')
       .populate('interestedUsers', 'name email phone lastActive')
+      .populate('teamApplications.user', 'name email phone lastActive')
       .populate('messages.sender', 'name email')
       .populate('files.uploadedBy', 'name email')
       .populate('validation.sharedFiles.uploadedBy', 'name email')
@@ -1108,11 +1113,72 @@ exports.addTeamMember = async (req, res) => {
   }
 }
 
+exports.applyToProjectTeam = async (req, res) => {
+  try {
+    const { id } = req.params
+    const requesterId = req.user?.userId
+    const role = String(req.body.role || '').trim().slice(0, 120)
+    const project = await Project.findById(id)
+    if (!project) return res.status(404).json({ message: 'Venture not found' })
+    if (!project.lookingForTeammates) return res.status(400).json({ message: 'This venture is not accepting teammate applications right now' })
+    if (toId(project.owner) === requesterId || (project.teamMembers || []).some((member) => toId(member) === requesterId)) {
+      return res.status(400).json({ message: 'You are already part of this venture' })
+    }
+    const existing = (project.teamApplications || []).find((item) => toId(item.user) === requesterId && item.status === 'pending')
+    if (existing) return res.status(400).json({ message: 'Application already pending' })
+    project.teamApplications.push({ user: requesterId, role, status: 'pending', createdAt: new Date() })
+    if (!(project.interestedUsers || []).some((userId) => toId(userId) === requesterId)) project.interestedUsers.push(requesterId)
+    await project.save()
+    await createNotification(project.owner, 'team_application', 'New teammate application', `A builder applied for ${role} on ${project.title}.`, project._id, requesterId, true, `/project/${project._id}`)
+    res.json({ message: 'Application sent' })
+  } catch (error) {
+    console.error('Apply teammate error:', error)
+    res.status(500).json({ message: 'Failed to apply for this venture' })
+  }
+}
+
+exports.respondToTeamApplication = async (req, res) => {
+  try {
+    const { id, applicationId } = req.params
+    const requesterId = req.user?.userId
+    const { action } = req.body
+    const project = await Project.findById(id)
+    if (!project) return res.status(404).json({ message: 'Venture not found' })
+    if (toId(project.owner) !== requesterId) return res.status(403).json({ message: 'Only the venture owner can respond' })
+    const application = project.teamApplications.id(applicationId)
+    if (!application) return res.status(404).json({ message: 'Application not found' })
+    if (application.status !== 'pending') return res.status(400).json({ message: 'Application already reviewed' })
+    const applicantId = toId(application.user)
+    if (action === 'accept') {
+      const maxTeamMembers = project.numberOfTeammates || 10
+      if ((project.teamMembers || []).length >= maxTeamMembers) return res.status(400).json({ message: 'Team is full' })
+      if (!(project.teamMembers || []).some((member) => toId(member) === applicantId)) project.teamMembers.push(application.user)
+      application.status = 'accepted'
+      await createNotification(applicantId, 'join_accepted', 'Application accepted', `You have been added to ${project.title}.`, project._id, project.owner, false, `/project/${project._id}`)
+    } else {
+      application.status = 'rejected'
+      await createNotification(applicantId, 'join_rejected', 'Application reviewed', `${project.title} is not adding you right now.`, project._id, project.owner, false, `/discover`)
+    }
+    application.decidedAt = new Date()
+    project.interestedUsers = (project.interestedUsers || []).filter((userId) => toId(userId) !== applicantId)
+    await project.save()
+    const populated = await Project.findById(project._id)
+      .populate('owner', 'name email')
+      .populate('teamMembers', 'name email')
+      .populate('interestedUsers', 'name email')
+      .populate('teamApplications.user', 'name email')
+    res.json({ message: `Application ${application.status}`, project: populated })
+  } catch (error) {
+    console.error('Respond teammate error:', error)
+    res.status(500).json({ message: 'Failed to review application' })
+  }
+}
+
 exports.updateProjectRequirements = async (req, res) => {
   try {
     const { id } = req.params
     const requesterId = req.user?.userId
-    const { rolesNeeded, skillsRequired, numberOfTeammates, visibility } = req.body
+    const { rolesNeeded, skillsRequired, numberOfTeammates, visibility, lookingForTeammates } = req.body
 
     if (!requesterId) {
       return res.status(401).json({ message: 'Unauthorized' })
@@ -1148,6 +1214,9 @@ exports.updateProjectRequirements = async (req, res) => {
         return res.status(400).json({ message: 'Visibility must be private, college, or global' })
       }
       project.visibility = visibility
+    }
+    if (typeof lookingForTeammates !== 'undefined') {
+      project.lookingForTeammates = lookingForTeammates === true || lookingForTeammates === 'true'
     }
     if (typeof rolesNeeded !== 'undefined') {
       project.rolesNeeded = normalizeLabelList(rolesNeeded)
